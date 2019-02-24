@@ -1,11 +1,20 @@
 use serde_derive::Deserialize;
 use serde_json::json;
 
+pub type VkResult<T> = Result<T, reqwest::Error>;
+
 #[derive(Deserialize, Debug)]
 pub struct VkUser {
     pub screen_name: String,
     pub first_name: String,
     pub last_name: String
+}
+
+#[derive(Deserialize, Debug)]
+pub struct VkPollState {
+    server: String,
+    key: String,
+    ts: u64
 }
 
 pub struct Vk {
@@ -23,7 +32,16 @@ impl Vk {
         }
     }
 
-    pub fn get_chat_members(&self) -> Result<Vec<VkUser>, reqwest::Error> {
+    pub fn init_long_poll(&self) -> VkResult<VkPollState> {
+        let mut resp: serde_json::Value = self
+            .api_get_method("messages.getLongPollServer", &[("lp_version", "2".to_owned())])
+            .send()?
+            .json()?;
+
+        Ok(serde_json::from_value(resp["response"].take()).unwrap())
+    }
+
+    pub fn get_chat_members(&self) -> VkResult<Vec<VkUser>> {
         let mut resp: serde_json::Value = self
             .api_get_method(
                 "messages.getConversationMembers",

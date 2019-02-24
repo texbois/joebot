@@ -12,7 +12,7 @@ fn main() {
 
     let vk = vk::Vk::new(token, chat_id);
     
-    println!("{:?}", vk.get_chat_members());
+    println!("{:?}", vk.init_long_poll());
 }
 
 fn pick_random_target() -> (&'static str, Vec<&'static str>) {
