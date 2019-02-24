@@ -1,0 +1,9 @@
+[package]
+name = "joebot"
+version = "0.1.0"
+authors = ["texbois"]
+edition = "2018"
+
+[dependencies]
+reqwest = "0.9"
+rand = "0.6"
