@@ -4,6 +4,9 @@ version = "0.1.0"
 authors = ["texbois"]
 edition = "2018"
 
+[build-dependencies]
+html5ever = "0.22"
+
 [dependencies]
 rand = "0.6"
 reqwest = "0.9"

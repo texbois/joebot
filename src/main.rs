@@ -3,6 +3,8 @@ use rand::seq::SliceRandom;
 
 mod vk;
 
+include!(concat!(env!("OUT_DIR"), "/messages.rs"));
+
 fn main() {
     /* https://oauth.vk.com/authorize?client_id=<...>&scope=offline,messages&redirect_uri=https://oauth.vk.com/blank.html&response_type=token */
     let token = std::env::var("API_TOKEN")
