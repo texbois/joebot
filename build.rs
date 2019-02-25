@@ -37,7 +37,7 @@ fn generate_code<W: io::Write>(out: &mut W, messages_by_name: &HashMap<String, V
 
     writeln!(out, "mod messages {{")?;
 
-    writeln!(out, "const SCREEN_NAMES: [&'static str; {}] = {:#?};", names.len(), names)?;
+    writeln!(out, "pub const SCREEN_NAMES: [&'static str; {}] = {:#?};", names.len(), names)?;
     for (i, name) in names.iter().enumerate() {
         let messages = &messages_by_name[*name];
         writeln!(out, "const MESSAGES_{}: [&'static str; {}] = {:#?};", i, messages.len(), messages)?;
