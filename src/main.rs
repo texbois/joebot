@@ -2,6 +2,7 @@ use rand::seq::SliceRandom;
 
 mod vk;
 mod taki;
+mod redis;
 
 include!(concat!(env!("OUT_DIR"), "/messages.rs"));
 
