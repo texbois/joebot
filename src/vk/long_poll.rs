@@ -36,7 +36,7 @@ impl<'a> VkMessagePoller<'a> {
     }
 
     fn poll_updates(&mut self) {
-        let mut resp: serde_json::Value = self.vk.client
+        let resp: serde_json::Value = self.vk.client
             .get(&format!(
                 "https://{}?act=a_check&key={}&ts={}&wait=25&mode=2&version=2",
                 self.poll_state.server, self.poll_state.key, self.poll_state.ts
