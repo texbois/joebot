@@ -2,7 +2,7 @@ use rand::seq::SliceRandom;
 
 mod vk;
 mod taki;
-mod redis;
+mod storage;
 
 include!(concat!(env!("OUT_DIR"), "/messages.rs"));
 
@@ -13,10 +13,13 @@ fn main() {
     let chat_id: u64 = std::env::var("CHAT_ID").ok().and_then(|id| id.parse().ok())
         .expect("Provide the bot's chatroom id via the CHAT_ID environment variable");
 
+    let redis = storage::Redis::new("redis://127.0.0.1/");
+
     let vk = vk::Vk::new(token);
     let bot_user = vk.get_bot_user().unwrap();
+    let chat_members = vk.get_chat_members(chat_id).unwrap();
 
-    let mut game = taki::Taki::new(chat_id, &bot_user, vk.get_chat_members(chat_id).unwrap());
+    let mut game = taki::Taki::new(chat_id, &bot_user, chat_members, &redis);
 
     for message in vk.poll_messages().unwrap() {
         if message.sender_id == bot_user.id {

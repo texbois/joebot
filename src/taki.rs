@@ -1,10 +1,11 @@
-use crate::{messages, vk::{VkUser, VkMessage, VkMessageOrigin}};
+use crate::{messages, storage, vk::{VkUser, VkMessage, VkMessageOrigin}};
 
-pub struct Taki {
+pub struct Taki<'a> {
     chat_id: u64,
     bot_user_id: u64,
     players: Vec<VkUser>,
-    ongoing: Option<OngoingGame>
+    ongoing: Option<OngoingGame>,
+    storage: storage::ChatGameStorage<'a>
 }
 
 struct OngoingGame {
@@ -12,9 +13,15 @@ struct OngoingGame {
     guesses: u8
 }
 
-impl Taki {
-    pub fn new(chat_id: u64, bot_user: &VkUser, players: Vec<VkUser>) -> Self {
-        Self { chat_id, bot_user_id: bot_user.id, players, ongoing: None }
+impl<'a> Taki<'a> {
+    pub fn new(chat_id: u64, bot_user: &VkUser, players: Vec<VkUser>, redis: &'a storage::Redis) -> Self {
+        Self {
+            chat_id,
+            players,
+            bot_user_id: bot_user.id,
+            ongoing: None,
+            storage: redis.get_game_storage("taki", chat_id)
+        }
     }
 
     pub fn process_with_reply(&mut self, message: &VkMessage) -> Option<(VkMessageOrigin, String)> {
