@@ -55,39 +55,45 @@ impl<'a> Taki<'a> {
         let is_bot_mentioned = message.text.starts_with(&format!("[id{}|", self.bot_user_id));
         let text = if is_bot_mentioned {
             let mention_end = message.text.find(']').unwrap_or(0);
-            &message.text[mention_end + 1..]
+            message.text[mention_end + 1..].trim()
         }
         else {
-            &message.text
+            message.text.trim()
         };
+
         let mut rng = rand::thread_rng();
 
         match (text, &mut self.ongoing) {
             ("начнем", None) if is_bot_mentioned => {
                 let (name, messages) = pick_random_target();
                 self.ongoing = Some(OngoingGame { name, guesses: 0 });
-                let msg = format!("{}\n{}", START_MESSAGES.choose(&mut rng).unwrap(), messages.join("\n"));
-                Some((message.origin, msg.to_owned()))
+                let start_message = format!("{}\n\n* {}", START_MESSAGES.choose(&mut rng).unwrap(), messages.join("\n* "));
+                Some((message.origin, start_message))
             },
             ("статы", _) if is_bot_mentioned => {
-                let stats = self.storage.fetch_sorted_set("scores").unwrap();
-                let msg = stats.into_iter().enumerate().map(|(index, (name, score))| format!("{}) {} -- {}", index, name, score)).collect::<Vec<String>>().join("\n");
-                Some((message.origin, msg))
+                let stats = self.storage.fetch_sorted_set("scores").unwrap()
+                    .into_iter().enumerate()
+                    .map(|(index, (name, score))| format!("{}) {} -- {}", index + 1, name, score))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                Some((message.origin, format!("Статы:\n{}", stats)))
             }
             (text, Some(ref mut game)) => {
                 let mention = text.split(" ").into_iter().nth(0).unwrap();
 
                 if mention == game.name {
                     let score = (MAX_GUESSES - game.guesses) as i32;
-                    self.storage.incr_in_set("scores", mention, score);
+                    let name = format!("{} {}", sender.first_name, sender.last_name);
+                    self.storage.incr_in_set("scores", &name, score);
                     self.ongoing = None;
-                    Some((message.origin, format!("Хорошая работа, приятель!\n{} {} + {}", sender.first_name, sender.last_name, score)))
+                    Some((message.origin, format!("{}\n{} +{}", WIN_MESSAGES.choose(&mut rng).unwrap(), name, score)))
                 }
                 else {
                     game.guesses += 1;
                     if game.guesses == MAX_GUESSES {
+                        let reply = format!("{}\nЭто был {}", LOSE_MESSAGES.choose(&mut rng).unwrap(), game.name);
                         self.ongoing = None;
-                        Some((message.origin, format!("{}\nЭто был {}", LOSE_MESSAGES.choose(&mut rng).unwrap(), game.name))
+                        Some((message.origin, reply))
                     }
                     else {
                         None
