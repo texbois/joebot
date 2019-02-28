@@ -1,5 +1,3 @@
-use rand::seq::SliceRandom;
-
 mod vk;
 mod taki;
 mod storage;
@@ -29,12 +27,4 @@ fn main() {
             vk.send_message(dest, reply).unwrap();
         }
     }
-}
-
-fn pick_random_target() -> (&'static str, Vec<&'static str>) {
-    let mut rng = rand::thread_rng();
-    let name = messages::SCREEN_NAMES.choose(&mut rng).unwrap();
-    let messages: Vec<&str> = messages::get_by_name(name).unwrap().choose_multiple(&mut rng, 5).cloned().collect();
-
-    (name, messages)
 }

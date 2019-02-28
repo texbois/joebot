@@ -1,6 +1,9 @@
 use crate::{messages, storage, vk::{VkUser, VkMessage, VkMessageOrigin}};
 use rand::seq::SliceRandom;
 
+const MAX_GUESSES: u8 = 5;
+const MESSAGES_SHOWN: usize = 3;
+
 pub struct Taki<'a> {
     chat_id: u64,
     bot_user_id: u64,
@@ -25,14 +28,6 @@ impl<'a> Taki<'a> {
         }
     }
 
-    fn pick_random_target() -> (&'static str, Vec<&'static str>) {
-        let mut rng = rand::thread_rng();
-        let name = messages::SCREEN_NAMES.choose(&mut rng).unwrap();
-        let messages: Vec<&str> = messages::get_by_name(name).unwrap().choose_multiple(&mut rng, 5).cloned().collect();
-
-        (name, messages)
-    }
-
     pub fn process_with_reply(&mut self, message: &VkMessage) -> Option<(VkMessageOrigin, String)> {
         let sender: &VkUser = match message.origin {
             VkMessageOrigin::Chatroom(message_chat_id) if self.chat_id == message_chat_id =>
@@ -41,8 +36,8 @@ impl<'a> Taki<'a> {
                 None
         }?;
 
-        let is_mention = message.text.starts_with(&format!("[id{}|", self.bot_user_id));
-        let text = if is_mention {
+        let is_bot_mentioned = message.text.starts_with(&format!("[id{}|", self.bot_user_id));
+        let text = if is_bot_mentioned {
             let mention_end = message.text.find(']').unwrap_or(0);
             &message.text[mention_end + 1..]
         }
@@ -50,39 +45,46 @@ impl<'a> Taki<'a> {
             &message.text
         };
 
-        match text {
-            "начнем" if self.ongoing.unwrap().name == "" => {
-                let (name, messages) = self.pick_random_target(); // doesnt work for some reason
+        match (text, &mut self.ongoing) {
+            ("начнем", None) if is_bot_mentioned => {
+                let (name, messages) = pick_random_target();
                 self.ongoing = Some(OngoingGame { name, guesses: 0 });
                 Some((message.origin, "Начнем игру!".to_owned()))
             },
-            "начнем" => None,
-            "статы" => {
+            ("статы", _) if is_bot_mentioned => {
                 let stats = self.storage.fetch_sorted_set(&"set");
                 Some((message.origin, "Статы".to_owned()))
-
             }
-            _ => {
-                let limit: u8 = 5;
+            (text, Some(ref mut game)) => {
                 let mention = text.split(" ").into_iter().nth(0).unwrap();
-                if mention == self.ongoing.unwrap().name {
-                    self.storage.incr_in_set(&"set", mention, (limit - self.ongoing.unwrap().guesses) as i32);
+
+                if mention == game.name {
+                    self.storage.incr_in_set(&"set", mention, (MAX_GUESSES - game.guesses) as i32);
                     self.ongoing = None;
                     Some((message.origin, "Поздравляю!".to_owned()))
                 }
                 else {
-                    let res = Some((message.origin, "Не угадал!".to_owned()));
-                    self.ongoing.unwrap().guesses += 1;
-                    if self.ongoing.unwrap().guesses == 5 {
-                        self.ongoing = Some(OngoingGame { name: "", guesses: 0 });
-                        res = Some((message.origin, "Игра окончена".to_owned()));
+                    game.guesses += 1;
+                    if game.guesses == MAX_GUESSES {
+                        self.ongoing = None;
+                        Some((message.origin, "Игра окончена".to_owned()))
                     }
-                    res
+                    else {
+                        Some((message.origin, "Не угадал!".to_owned()))
+                    }
                 }
-            }
+            },
+            _ => None
         }
-
-        //Some((message.origin, "nice".to_owned()))
     }
 }
 
+fn pick_random_target() -> (&'static str, Vec<&'static str>) {
+    let mut rng = rand::thread_rng();
+    let name = messages::SCREEN_NAMES.choose(&mut rng).unwrap();
+    let messages: Vec<&str> = messages::get_by_name(name).unwrap()
+        .choose_multiple(&mut rng, MESSAGES_SHOWN)
+        .cloned().collect();
+
+    (name, messages)
+}
