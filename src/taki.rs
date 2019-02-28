@@ -13,6 +13,12 @@ const WIN_MESSAGES: [&'static str; 3] = [
     "Ты справился? Неплохо, дружище.",
     "Дело сделано, дружочки."
 ];
+const LOSE_MESSAGES: [&'static str; 4] = [
+    "С меня хватит, уроды. В следующий раз удачи!",
+    "Очень жаль, но вы не справились. Я закрываю игру.",
+    "Я вас выслушал, товарищи студенты... А теперь игра окончена.",
+    "Wake up, Neo. You obosralsya. Game over."
+];
 
 pub struct Taki<'a> {
     chat_id: u64,
@@ -81,7 +87,7 @@ impl<'a> Taki<'a> {
                     game.guesses += 1;
                     if game.guesses == MAX_GUESSES {
                         self.ongoing = None;
-                        Some((message.origin, "Игра окончена".to_owned()))
+                        Some((message.origin, format!("{}\nЭто был {}", LOSE_MESSAGES.choose(&mut rng).unwrap(), game.name))
                     }
                     else {
                         None
