@@ -49,19 +49,22 @@ impl<'a> Taki<'a> {
             ("начнем", None) if is_bot_mentioned => {
                 let (name, messages) = pick_random_target();
                 self.ongoing = Some(OngoingGame { name, guesses: 0 });
-                Some((message.origin, "Начнем игру!".to_owned()))
+                let msg = format!("Начнем игру!\n{}", messages.join("\n"));
+                Some((message.origin, msg.to_owned()))
             },
             ("статы", _) if is_bot_mentioned => {
-                let stats = self.storage.fetch_sorted_set(&"set");
-                Some((message.origin, "Статы".to_owned()))
+                let stats = self.storage.fetch_sorted_set("scores").unwrap();
+                let msg = stats.into_iter().enumerate().map(|(index, (name, score))| format!("{}) {} -- {}", index, name, score)).collect::<Vec<String>>().join("\n");
+                Some((message.origin, msg))
             }
             (text, Some(ref mut game)) => {
                 let mention = text.split(" ").into_iter().nth(0).unwrap();
 
                 if mention == game.name {
-                    self.storage.incr_in_set(&"set", mention, (MAX_GUESSES - game.guesses) as i32);
+                    let score = (MAX_GUESSES - game.guesses) as i32;
+                    self.storage.incr_in_set("scores", mention, score);
                     self.ongoing = None;
-                    Some((message.origin, "Поздравляю!".to_owned()))
+                    Some((message.origin, format!("Хорошая работа, приятель!\n{} {} + {}", sender.first_name, sender.last_name, score)))
                 }
                 else {
                     game.guesses += 1;
@@ -70,7 +73,7 @@ impl<'a> Taki<'a> {
                         Some((message.origin, "Игра окончена".to_owned()))
                     }
                     else {
-                        Some((message.origin, "Не угадал!".to_owned()))
+                        None
                     }
                 }
             },
