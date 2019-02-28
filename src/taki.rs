@@ -3,6 +3,16 @@ use rand::seq::SliceRandom;
 
 const MAX_GUESSES: u8 = 5;
 const MESSAGES_SHOWN: usize = 3;
+const START_MESSAGES: [&'static str; 3] = [
+    "Начнем игру! Вычислите дружка-пирожка по цитаткам:",
+    "Поехали, други! Три цитаты, один чувак из чата - вы знаете, что делать:",
+    "The game must go on! Вычисли приятеля по айпи:"
+];
+const WIN_MESSAGES: [&'static str; 3] = [
+    "Хорошая работа, приятель.",
+    "Ты справился? Неплохо, дружище.",
+    "Дело сделано, дружочки."
+];
 
 pub struct Taki<'a> {
     chat_id: u64,
@@ -44,12 +54,13 @@ impl<'a> Taki<'a> {
         else {
             &message.text
         };
+        let mut rng = rand::thread_rng();
 
         match (text, &mut self.ongoing) {
             ("начнем", None) if is_bot_mentioned => {
                 let (name, messages) = pick_random_target();
                 self.ongoing = Some(OngoingGame { name, guesses: 0 });
-                let msg = format!("Начнем игру!\n{}", messages.join("\n"));
+                let msg = format!("{}\n{}", START_MESSAGES.choose(&mut rng).unwrap(), messages.join("\n"));
                 Some((message.origin, msg.to_owned()))
             },
             ("статы", _) if is_bot_mentioned => {
