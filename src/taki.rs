@@ -29,7 +29,9 @@ pub struct Taki<'a> {
 }
 
 struct OngoingGame {
-    name: &'static str,
+    full_name_trunc: String,
+    full_name: &'static str,
+    screen_name: &'static str,
     guesses: u8
 }
 
@@ -53,20 +55,31 @@ impl<'a> Taki<'a> {
         }?;
 
         let is_bot_mentioned = message.text.starts_with(&format!("[id{}|", self.bot_user_id));
-        let text = if is_bot_mentioned {
+        let text: String = if is_bot_mentioned {
             let mention_end = message.text.find(']').unwrap_or(0);
-            message.text[mention_end + 1..].trim()
+            message.text[mention_end + 1..].trim().to_lowercase()
         }
         else {
-            message.text.trim()
+            message.text.trim().to_lowercase()
         };
 
         let mut rng = rand::thread_rng();
 
-        match (text, &mut self.ongoing) {
+        match (text.as_str(), &mut self.ongoing) {
             ("начнем", None) if is_bot_mentioned => {
-                let (name, messages) = pick_random_target();
-                self.ongoing = Some(OngoingGame { name, guesses: 0 });
+                let ((screen_name, full_name), messages) = pick_random_target();
+
+                let full_name_sep = full_name.find(' ').unwrap_or(text.len() - 1);
+                let full_name_trunc = full_name.to_lowercase()
+                    .chars().take(full_name_sep + 2).collect::<String>();
+
+                self.ongoing = Some(OngoingGame {
+                    full_name_trunc,
+                    full_name,
+                    screen_name,
+                    guesses: 0
+                });
+
                 let start_message = format!("{}\n\n* {}", START_MESSAGES.choose(&mut rng).unwrap(), messages.join("\n* "));
                 Some((message.origin, start_message))
             },
@@ -77,11 +90,16 @@ impl<'a> Taki<'a> {
                     .collect::<Vec<_>>()
                     .join("\n");
                 Some((message.origin, format!("Статы:\n{}", stats)))
-            }
+            },
             (text, Some(ref mut game)) => {
-                let mention = text.split(" ").into_iter().nth(0).unwrap();
+                let first_sep = text.find(' ').unwrap_or(text.len() - 1);
+                let extracted_screen_name: String = text.chars().take(first_sep).collect();
+                let extracted_full_name_trunc: String = text.chars().take(first_sep + 2).collect();
 
-                if mention == game.name {
+                let has_matched = extracted_screen_name == game.screen_name ||
+                    extracted_full_name_trunc == game.full_name_trunc;
+
+                if has_matched {
                     let score = (MAX_GUESSES - game.guesses) as i32;
                     let name = format!("{} {}", sender.first_name, sender.last_name);
                     self.storage.incr_in_set("scores", &name, score);
@@ -91,7 +109,7 @@ impl<'a> Taki<'a> {
                 else {
                     game.guesses += 1;
                     if game.guesses == MAX_GUESSES {
-                        let reply = format!("{}\nЭто был {}", LOSE_MESSAGES.choose(&mut rng).unwrap(), game.name);
+                        let reply = format!("{}\nЭто был {} ({})", LOSE_MESSAGES.choose(&mut rng).unwrap(), game.full_name, game.screen_name);
                         self.ongoing = None;
                         Some((message.origin, reply))
                     }
@@ -105,12 +123,16 @@ impl<'a> Taki<'a> {
     }
 }
 
-fn pick_random_target() -> (&'static str, Vec<&'static str>) {
+fn pick_random_target() -> ((&'static str, &'static str), Vec<&'static str>) {
     let mut rng = rand::thread_rng();
-    let name = messages::SCREEN_NAMES.choose(&mut rng).unwrap();
-    let messages: Vec<&str> = messages::get_by_name(name).unwrap()
+    let screen_name = messages::SCREEN_NAMES.choose(&mut rng).unwrap();
+
+    let (full_name, all_messages) =
+        messages::get_full_name_and_messages(screen_name).unwrap();
+
+    let message_sample: Vec<&str> = all_messages
         .choose_multiple(&mut rng, MESSAGES_SHOWN)
         .cloned().collect();
 
-    (name, messages)
+    ((screen_name, full_name), message_sample)
 }
