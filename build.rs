@@ -33,6 +33,12 @@ fn main() {
     generate_code(&mut f, &messages_by_name, &full_names).unwrap();
 }
 
+fn trunc_full_name(full_name: &str) -> String {
+    let full_name_sep = full_name.find(' ').unwrap_or(full_name.len() - 1);
+
+    full_name.to_lowercase().chars().take(full_name_sep + 2).collect()
+}
+
 fn generate_code<W: io::Write>(out: &mut W, messages: &HashMap<String, Vec<String>>, full_names: &HashMap<String, String>) -> io::Result<()> {
     let names: Vec<&String> = messages.keys().map(|k| k).collect();
 
@@ -42,16 +48,18 @@ fn generate_code<W: io::Write>(out: &mut W, messages: &HashMap<String, Vec<Strin
         names.len(), names)?;
     writeln!(out, "pub const FULL_NAMES: [&'static str; {}] = {:#?};",
         names.len(), names.iter().map(|&n| &full_names[n]).collect::<Vec<_>>())?;
+    writeln!(out, "pub const FULL_NAMES_TRUNC: [&'static str; {}] = {:#?};",
+        names.len(), names.iter().map(|&n| trunc_full_name(&full_names[n])).collect::<Vec<_>>())?;
 
     for (i, name) in names.iter().enumerate() {
         let messages_by_name = &messages[*name];
         writeln!(out, "const MESSAGES_{}: [&'static str; {}] = {:#?};", i, messages_by_name.len(), messages_by_name)?;
     }
 
-    writeln!(out, "pub fn get_full_name_and_messages(name: &str) -> Option<(&'static str, &'static [&str])> {{")?;
+    writeln!(out, "pub fn get_full_name_full_name_trunc_messages(name: &str) -> Option<(&'static str, &'static str, &'static [&str])> {{")?;
     writeln!(out, "    match name {{")?;
     for (i, name) in names.iter().enumerate() {
-        writeln!(out, "        {:?} => Some((FULL_NAMES[{}], &MESSAGES_{})),", name, i, i)?;
+        writeln!(out, "        {:?} => Some((FULL_NAMES[{}], FULL_NAMES_TRUNC[{}], &MESSAGES_{})),", name, i, i, i)?;
     }
     writeln!(out, "        _ => None")?;
     writeln!(out, "    }}")?;

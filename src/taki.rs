@@ -29,9 +29,9 @@ pub struct Taki<'a> {
 }
 
 struct OngoingGame {
-    full_name_trunc: String,
-    full_name: &'static str,
     screen_name: &'static str,
+    full_name: &'static str,
+    full_name_trunc: &'static str,
     guesses: u8
 }
 
@@ -67,16 +67,12 @@ impl<'a> Taki<'a> {
 
         match (text.as_str(), &mut self.ongoing) {
             ("начнем", None) if is_bot_mentioned => {
-                let ((screen_name, full_name), messages) = pick_random_target();
-
-                let full_name_sep = full_name.find(' ').unwrap_or(text.len() - 1);
-                let full_name_trunc = full_name.to_lowercase()
-                    .chars().take(full_name_sep + 2).collect::<String>();
+                let ((screen_name, full_name, full_name_trunc), messages) = pick_random_target();
 
                 self.ongoing = Some(OngoingGame {
-                    full_name_trunc,
-                    full_name,
                     screen_name,
+                    full_name,
+                    full_name_trunc,
                     guesses: 0
                 });
 
@@ -123,16 +119,16 @@ impl<'a> Taki<'a> {
     }
 }
 
-fn pick_random_target() -> ((&'static str, &'static str), Vec<&'static str>) {
+fn pick_random_target() -> ((&'static str, &'static str, &'static str), Vec<&'static str>) {
     let mut rng = rand::thread_rng();
     let screen_name = messages::SCREEN_NAMES.choose(&mut rng).unwrap();
 
-    let (full_name, all_messages) =
-        messages::get_full_name_and_messages(screen_name).unwrap();
+    let (full_name, full_name_trunc, all_messages) =
+        messages::get_full_name_full_name_trunc_messages(screen_name).unwrap();
 
     let message_sample: Vec<&str> = all_messages
         .choose_multiple(&mut rng, MESSAGES_SHOWN)
         .cloned().collect();
 
-    ((screen_name, full_name), message_sample)
+    ((screen_name, full_name, full_name_trunc), message_sample)
 }
