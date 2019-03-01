@@ -87,6 +87,19 @@ impl<'a> Taki<'a> {
                     .join("\n");
                 Some((message.origin, format!("Статы:\n{}", stats)))
             },
+            ("подозреваемые", _) if is_bot_mentioned => {
+                let suspects = messages::SCREEN_NAMES.iter()
+                    .enumerate()
+                    .zip(messages::FULL_NAMES.iter())
+                    .zip(messages::FULL_NAMES_TRUNC.iter())
+                    .map(|(((idx, screen_name), full_name), full_name_trunc)|
+                         format!("{}) {} под псевдонимами \"{}\", \"{}\"", idx + 1, full_name, screen_name, full_name_trunc)
+                    )
+                    .collect::<Vec<String>>()
+                    .join("\n");
+
+                Some((message.origin, format!("Подозреваемые:\n{}", suspects)))
+            },
             (text, Some(ref mut game)) => {
                 let first_sep = text.find(' ').unwrap_or(text.len() - 1);
                 let extracted_screen_name: String = text.chars().take(first_sep).collect();
