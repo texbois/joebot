@@ -1,5 +1,5 @@
 use crate::{messages, storage, vk::{VkUser, VkMessage, VkMessageOrigin}};
-use rand::seq::SliceRandom;
+use rand::{FromEntropy, seq::SliceRandom, rngs::SmallRng};
 
 const MAX_GUESSES: u8 = 5;
 const MESSAGES_SHOWN: usize = 3;
@@ -25,7 +25,8 @@ pub struct Taki<'a> {
     bot_user_id: u64,
     players: Vec<VkUser>,
     ongoing: Option<OngoingGame>,
-    storage: storage::ChatGameStorage<'a>
+    storage: storage::ChatGameStorage<'a>,
+    rng: SmallRng
 }
 
 struct OngoingGame {
@@ -42,7 +43,8 @@ impl<'a> Taki<'a> {
             players,
             bot_user_id: bot_user.id,
             ongoing: None,
-            storage: redis.get_game_storage("taki", chat_id)
+            storage: redis.get_game_storage("taki", chat_id),
+            rng: SmallRng::from_entropy()
         }
     }
 
@@ -63,11 +65,9 @@ impl<'a> Taki<'a> {
             message.text.trim().to_lowercase()
         };
 
-        let mut rng = rand::thread_rng();
-
         match (text.as_str(), &mut self.ongoing) {
             ("начнем", None) if is_bot_mentioned => {
-                let ((screen_name, full_name, full_name_trunc), messages) = pick_random_target();
+                let ((screen_name, full_name, full_name_trunc), messages) = pick_random_target(&mut self.rng);
 
                 self.ongoing = Some(OngoingGame {
                     screen_name,
@@ -76,7 +76,7 @@ impl<'a> Taki<'a> {
                     guesses: 0
                 });
 
-                let start_message = format!("{}\n\n* {}", START_MESSAGES.choose(&mut rng).unwrap(), messages.join("\n* "));
+                let start_message = format!("{}\n\n* {}", START_MESSAGES.choose(&mut self.rng).unwrap(), messages.join("\n* "));
                 Some((message.origin, start_message))
             },
             ("статы", _) if is_bot_mentioned => {
@@ -113,12 +113,12 @@ impl<'a> Taki<'a> {
                     let name = format!("{} {}", sender.first_name, sender.last_name);
                     self.storage.incr_in_set("scores", &name, score);
                     self.ongoing = None;
-                    Some((message.origin, format!("{}\n{} +{}", WIN_MESSAGES.choose(&mut rng).unwrap(), name, score)))
+                    Some((message.origin, format!("{}\n{} +{}", WIN_MESSAGES.choose(&mut self.rng).unwrap(), name, score)))
                 }
                 else {
                     game.guesses += 1;
                     if game.guesses == MAX_GUESSES {
-                        let reply = format!("{}\nЭто был {} ({})", LOSE_MESSAGES.choose(&mut rng).unwrap(), game.full_name, game.screen_name);
+                        let reply = format!("{}\nЭто был {} ({})", LOSE_MESSAGES.choose(&mut self.rng).unwrap(), game.full_name, game.screen_name);
                         self.ongoing = None;
                         Some((message.origin, reply))
                     }
@@ -132,15 +132,14 @@ impl<'a> Taki<'a> {
     }
 }
 
-fn pick_random_target() -> ((&'static str, &'static str, &'static str), Vec<&'static str>) {
-    let mut rng = rand::thread_rng();
-    let screen_name = messages::SCREEN_NAMES.choose(&mut rng).unwrap();
+fn pick_random_target(rng: &mut SmallRng) -> ((&'static str, &'static str, &'static str), Vec<&'static str>) {
+    let screen_name = messages::SCREEN_NAMES.choose(rng).unwrap();
 
     let (full_name, full_name_trunc, all_messages) =
         messages::get_full_name_full_name_trunc_messages(screen_name).unwrap();
 
     let message_sample: Vec<&str> = all_messages
-        .choose_multiple(&mut rng, MESSAGES_SHOWN)
+        .choose_multiple(rng, MESSAGES_SHOWN)
         .cloned().collect();
 
     ((screen_name, full_name, full_name_trunc), message_sample)
