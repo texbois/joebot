@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use serde_derive::Deserialize;
 
-use crate::telegram::{Telegram, Message};
+use crate::telegram::{Telegram, Message, MessageContents};
 
 pub struct MessagePoller<'a> {
     client: &'a Telegram,
@@ -27,7 +27,7 @@ impl<'a> MessagePoller<'a> {
 
     fn poll_updates(&mut self) {
         let mut resp: serde_json::Value = self.client
-            .api_method_get("getUpdates", &[
+            .api_method("getUpdates", &[
                 ("timeout", "25".to_owned()),
                 ("allowed_updates", "message".to_owned()),
                 ("offset", (self.update_offset + 1).to_string())
@@ -46,6 +46,8 @@ impl<'a> MessagePoller<'a> {
 
 fn parse_text_message(update_obj: &serde_json::Value) -> Option<Message> {
     let message_obj = update_obj.get("message")?;
+
+    let chat_id = message_obj.get("chat")?.get("id")?.as_i64()?;
     let text = message_obj.get("text")?.as_str()?;
     /* If the current message contains a "text" field, it also has { from: { username: "..." } } */
     let sender = message_obj["from"]["username"].as_str()?.to_owned();
@@ -63,10 +65,12 @@ fn parse_text_message(update_obj: &serde_json::Value) -> Option<Message> {
             }
         });
 
-    if let Some((command, receiver)) = bot_command {
-        Some(Message::Command { command, receiver, sender })
+    let contents = if let Some((command, receiver)) = bot_command {
+        MessageContents::Command { command, receiver }
     }
     else {
-        Some(Message::Text { contents: text.to_owned(), sender })
-    }
+        MessageContents::Text(text.to_owned())
+    };
+
+    Some(Message { chat_id, sender, contents })
 }

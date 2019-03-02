@@ -1,30 +1,40 @@
-mod vk;
+#![feature(slice_patterns)]
+
 mod taki;
+mod telegram;
 mod storage;
 
 include!(concat!(env!("OUT_DIR"), "/messages.rs"));
 
 fn main() {
-    /* https://oauth.vk.com/authorize?client_id=<...>&scope=offline,messages&redirect_uri=https://oauth.vk.com/blank.html&response_type=token */
-    let token = std::env::var("API_TOKEN")
-        .expect("Provide a valid API token via the API_TOKEN environment variable");
-    let chat_id: u64 = std::env::var("CHAT_ID").ok().and_then(|id| id.parse().ok())
+    let bot_token = std::env::var("BOT_TOKEN")
+        .expect("Provide a valid bot token via the BOT_TOKEN environment variable");
+    let bot_chat_id: i64 = std::env::var("CHAT_ID").ok().and_then(|id| id.parse().ok())
         .expect("Provide the bot's chatroom id via the CHAT_ID environment variable");
 
     let redis = storage::Redis::new("redis://127.0.0.1/");
 
-    let vk = vk::Vk::new(token);
-    let bot_user = vk.get_bot_user().unwrap();
-    let chat_members = vk.get_chat_members(chat_id).unwrap();
+    let telegram = telegram::Telegram::new(&bot_token);
+    let bot_name = telegram.get_bot_username().unwrap();
 
-    let mut game = taki::Taki::new(chat_id, &bot_user, chat_members, &redis);
+    println!("@{} is ready. Polling for incoming messages from chat #{}", bot_name, bot_chat_id);
 
-    for message in vk.poll_messages().unwrap() {
-        if message.sender_id == bot_user.id {
+    //let mut game = taki::Taki::new(chat_id, &bot_user, chat_members, &redis);
+
+    for message in telegram.poll_messages() {
+        if message.chat_id != bot_chat_id {
             continue;
         }
-        if let Some((dest, reply)) = game.process_with_reply(&message) {
-            vk.send_message(dest, reply).unwrap();
+        if let telegram::MessageContents::Command { receiver: Some(ref receiver_name), .. } = message.contents {
+            if receiver_name != &bot_name {
+                continue;
+            }
         }
+
+        println!("{:#?}", message);
+
+        //if let Some((dest, reply)) = game.process_with_reply(&message) {
+        //    vk.send_message(dest, reply).unwrap();
+        //}
     }
 }
