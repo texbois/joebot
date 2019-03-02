@@ -10,3 +10,8 @@ to export any VKontakte chat you'd like to use for the _Taki_ game
 (be sure to select the _Export as .html_ option)
 2. Save the chat history file as `messages.html` and place it in the crate root.
 3. ??? (WIP)
+
+## Why Telegram?
+
+Joe was initially developed as a Vkontakte chat bot. However, the site's administration
+[explicitly forbids](https://vk.com/faq13567) applications to "work with user messages from a server".
