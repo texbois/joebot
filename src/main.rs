@@ -19,7 +19,7 @@ fn main() {
 
     println!("@{} is ready. Polling for incoming messages from chat #{}", bot_name, bot_chat_id);
 
-    //let mut game = taki::Taki::new(chat_id, &bot_user, chat_members, &redis);
+    let mut game = taki::Taki::new(bot_chat_id, &redis);
 
     for message in telegram.poll_messages() {
         if message.chat_id != bot_chat_id {
@@ -33,8 +33,8 @@ fn main() {
 
         println!("{:#?}", message);
 
-        //if let Some((dest, reply)) = game.process_with_reply(&message) {
-        //    vk.send_message(dest, reply).unwrap();
-        //}
+        if let Some(reply) = game.process_with_reply(&message) {
+        //    telegram.send_message(reply).unwrap();
+        }
     }
 }

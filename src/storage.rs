@@ -17,7 +17,7 @@ impl Redis {
         }
     }
 
-    pub fn get_game_storage<'a>(&'a self, game: &str, chat_id: u64) -> ChatGameStorage<'a> {
+    pub fn get_game_storage<'a>(&'a self, game: &str, chat_id: i64) -> ChatGameStorage<'a> {
         ChatGameStorage {
             connection: &self.connection,
             key_prefix: format!("{}-{}", game, chat_id)

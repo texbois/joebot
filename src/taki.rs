@@ -1,4 +1,4 @@
-use crate::{messages, storage, vk::{VkUser, VkMessage, VkMessageOrigin}};
+use crate::{messages, storage, telegram::Message};
 use rand::{FromEntropy, seq::SliceRandom, rngs::SmallRng};
 
 const MAX_GUESSES: u8 = 5;
@@ -21,9 +21,6 @@ const LOSE_MESSAGES: [&'static str; 4] = [
 ];
 
 pub struct Taki<'a> {
-    chat_id: u64,
-    bot_user_id: u64,
-    players: Vec<VkUser>,
     ongoing: Option<OngoingGame>,
     storage: storage::ChatGameStorage<'a>,
     rng: SmallRng
@@ -37,36 +34,19 @@ struct OngoingGame {
 }
 
 impl<'a> Taki<'a> {
-    pub fn new(chat_id: u64, bot_user: &VkUser, players: Vec<VkUser>, redis: &'a storage::Redis) -> Self {
+    pub fn new(chat_id: i64, redis: &'a storage::Redis) -> Self {
         Self {
-            chat_id,
-            players,
-            bot_user_id: bot_user.id,
             ongoing: None,
             storage: redis.get_game_storage("taki", chat_id),
             rng: SmallRng::from_entropy()
         }
     }
 
-    pub fn process_with_reply(&mut self, message: &VkMessage) -> Option<(VkMessageOrigin, String)> {
-        let sender: &VkUser = match message.origin {
-            VkMessageOrigin::Chatroom(message_chat_id) if self.chat_id == message_chat_id =>
-                self.players.iter().find(|u| u.id == message.sender_id),
-            _ =>
-                None
-        }?;
+    pub fn process_with_reply(&mut self, message: &Message) -> Option<String> {
+        use crate::telegram::MessageContents::*;
 
-        let is_bot_mentioned = message.text.starts_with(&format!("[id{}|", self.bot_user_id));
-        let text: String = if is_bot_mentioned {
-            let mention_end = message.text.find(']').unwrap_or(0);
-            message.text[mention_end + 1..].trim().to_lowercase()
-        }
-        else {
-            message.text.trim().to_lowercase()
-        };
-
-        match (text.as_str(), &mut self.ongoing) {
-            ("начнем", None) if is_bot_mentioned => {
+        match (&message.contents, &mut self.ongoing) {
+            (&Command { ref command, .. }, None) if command == "takistart" => {
                 let ((screen_name, full_name, full_name_trunc), messages) = pick_random_target(&mut self.rng);
 
                 self.ongoing = Some(OngoingGame {
@@ -76,18 +56,18 @@ impl<'a> Taki<'a> {
                     guesses: 0
                 });
 
-                let start_message = format!("{}\n\n* {}", START_MESSAGES.choose(&mut self.rng).unwrap(), messages.join("\n* "));
-                Some((message.origin, start_message))
+                Some(format!("{}\n\n* {}", START_MESSAGES.choose(&mut self.rng).unwrap(), messages.join("\n* ")))
             },
-            ("статы", _) if is_bot_mentioned => {
+            (&Command { ref command, .. }, _) if command == "stats" => {
                 let stats = self.storage.fetch_sorted_set("scores").unwrap()
                     .into_iter().enumerate()
                     .map(|(index, (name, score))| format!("{}) {} -- {}", index + 1, name, score))
                     .collect::<Vec<_>>()
                     .join("\n");
-                Some((message.origin, format!("Статы:\n{}", stats)))
+
+                Some(format!("Статы:\n{}", stats))
             },
-            ("подозреваемые", _) if is_bot_mentioned => {
+            (&Command { ref command, .. }, _) if command == "suspects" => {
                 let suspects = messages::SCREEN_NAMES.iter()
                     .enumerate()
                     .zip(messages::FULL_NAMES.iter())
@@ -98,9 +78,9 @@ impl<'a> Taki<'a> {
                     .collect::<Vec<String>>()
                     .join("\n");
 
-                Some((message.origin, format!("Подозреваемые:\n{}", suspects)))
+                Some(format!("Подозреваемые:\n{}", suspects))
             },
-            (text, Some(ref mut game)) => {
+            (&Text(ref text), Some(ref mut game)) => {
                 let first_sep = text.find(' ').unwrap_or(text.len() - 1);
                 let extracted_screen_name: String = text.chars().take(first_sep).collect();
                 let extracted_full_name_trunc: String = text.chars().take(first_sep + 2).collect();
@@ -110,17 +90,19 @@ impl<'a> Taki<'a> {
 
                 if has_matched {
                     let score = (MAX_GUESSES - game.guesses) as i32;
-                    let name = format!("{} {}", sender.first_name, sender.last_name);
-                    self.storage.incr_in_set("scores", &name, score);
+                    self.storage.incr_in_set("scores", &message.sender, score).unwrap();
                     self.ongoing = None;
-                    Some((message.origin, format!("{}\n{} +{}", WIN_MESSAGES.choose(&mut self.rng).unwrap(), name, score)))
+
+                    Some(format!("{}\n{} +{}", WIN_MESSAGES.choose(&mut self.rng).unwrap(), message.sender, score))
                 }
                 else {
                     game.guesses += 1;
+
                     if game.guesses == MAX_GUESSES {
                         let reply = format!("{}\nЭто был {} ({})", LOSE_MESSAGES.choose(&mut self.rng).unwrap(), game.full_name, game.screen_name);
                         self.ongoing = None;
-                        Some((message.origin, reply))
+
+                        Some(reply)
                     }
                     else {
                         None
