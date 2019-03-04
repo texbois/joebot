@@ -49,8 +49,16 @@ fn parse_text_message(update_obj: &serde_json::Value) -> Option<Message> {
 
     let chat_id = message_obj.get("chat")?.get("id")?.as_i64()?;
     let text = message_obj.get("text")?.as_str()?;
-    /* If the current message contains a "text" field, it also has { from: { username: "..." } } */
-    let sender = message_obj["from"]["username"].as_str()?.to_owned();
+    /* If the current message contains a "text" field, it also has { from: { ... } } */
+
+    let from_obj = message_obj.get("from")?;
+    let sender = from_obj.get("username")
+        .and_then(|u| u.as_str()).map(|n| n.to_owned())
+        .or_else(|| {
+            let first_name = from_obj.get("first_name")?.as_str()?;
+            let last_name = from_obj.get("last_name")?.as_str()?;
+            Some([first_name, " ", last_name].concat())
+        })?;
 
     let bot_command = message_obj.get("entities")
         .and_then(|es| es.as_array())

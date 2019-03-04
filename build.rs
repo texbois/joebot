@@ -34,7 +34,7 @@ fn main() {
 }
 
 fn trunc_full_name(full_name: &str) -> String {
-    let full_name_sep = full_name.find(' ').unwrap_or(full_name.len() - 1);
+    let full_name_sep = full_name.chars().position(|c| c == ' ').unwrap_or(full_name.len() - 1);
 
     full_name.to_lowercase().chars().take(full_name_sep + 2).collect()
 }
