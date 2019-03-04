@@ -31,10 +31,8 @@ fn main() {
             }
         }
 
-        println!("{:#?}", message);
-
         if let Some(reply) = game.process_with_reply(&message) {
-        //    telegram.send_message(reply).unwrap();
+            telegram.send_message(bot_chat_id, &reply).unwrap();
         }
     }
 }

@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use serde_derive::Deserialize;
+use serde_json::json;
 
 use crate::telegram::{Telegram, Message, MessageContents};
 
@@ -26,12 +26,12 @@ impl<'a> MessagePoller<'a> {
     }
 
     fn poll_updates(&mut self) {
-        let mut resp: serde_json::Value = self.client
-            .api_method("getUpdates", &[
-                ("timeout", "25".to_owned()),
-                ("allowed_updates", "message".to_owned()),
-                ("offset", (self.update_offset + 1).to_string())
-            ])
+        let resp: serde_json::Value = self.client
+            .api_method("getUpdates", Some(json!({
+                "timeout": 25,
+                "allowed_updates": ["message"],
+                "offset": self.update_offset + 1
+            })))
             .send().unwrap()
             .json().unwrap();
 

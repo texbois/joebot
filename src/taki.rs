@@ -58,7 +58,7 @@ impl<'a> Taki<'a> {
 
                 Some(format!("{}\n\n* {}", START_MESSAGES.choose(&mut self.rng).unwrap(), messages.join("\n* ")))
             },
-            (&Command { ref command, .. }, _) if command == "stats" => {
+            (&Command { ref command, .. }, _) if command == "takistats" => {
                 let stats = self.storage.fetch_sorted_set("scores").unwrap()
                     .into_iter().enumerate()
                     .map(|(index, (name, score))| format!("{}) {} -- {}", index + 1, name, score))
@@ -67,7 +67,7 @@ impl<'a> Taki<'a> {
 
                 Some(format!("Статы:\n{}", stats))
             },
-            (&Command { ref command, .. }, _) if command == "suspects" => {
+            (&Command { ref command, .. }, _) if command == "takisuspects" => {
                 let suspects = messages::SCREEN_NAMES.iter()
                     .enumerate()
                     .zip(messages::FULL_NAMES.iter())

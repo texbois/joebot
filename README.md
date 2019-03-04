@@ -13,5 +13,5 @@ to export any VKontakte chat you'd like to use for the _Taki_ game
 
 ## Why Telegram?
 
-Joe was initially developed as a Vkontakte chat bot. However, the site's administration
-[explicitly forbids](https://vk.com/faq13567) applications to "work with user messages from a server".
+Joe was initially developed as a VK chat bot. However, the site's administration
+[forbids sending messages from the server](https://vk.com/faq13567).
