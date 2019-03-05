@@ -81,7 +81,9 @@ impl<'a> Taki<'a> {
                 Some(format!("Подозреваемые:\n{}", suspects))
             },
             (&Text(ref text), Some(ref mut game)) => {
-                if text.starts_with(game.screen_name) || text.starts_with(game.full_name_trunc) {
+                let text_lower = text.to_lowercase();
+
+                if text_lower.starts_with(game.screen_name) || text_lower.starts_with(game.full_name_trunc) {
                     let reply = format!("{}\n{} +{}", WIN_MESSAGES.choose(&mut self.rng).unwrap(), message.sender, game.score);
 
                     self.storage.incr_in_set("scores", &message.sender, game.score).unwrap();
