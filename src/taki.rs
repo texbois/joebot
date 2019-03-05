@@ -1,7 +1,7 @@
 use crate::{messages, storage, telegram::Message};
 use rand::{FromEntropy, seq::SliceRandom, rngs::SmallRng};
 
-const MAX_GUESSES: u8 = 5;
+const INIT_SCORE: i32 = 5;
 const MESSAGES_SHOWN: usize = 3;
 const START_MESSAGES: [&'static str; 3] = [
     "Начнем игру! Вычислите дружка-пирожка по цитаткам:",
@@ -30,7 +30,7 @@ struct OngoingGame {
     screen_name: &'static str,
     full_name: &'static str,
     full_name_trunc: &'static str,
-    guesses: u8
+    score: i32
 }
 
 impl<'a> Taki<'a> {
@@ -53,7 +53,7 @@ impl<'a> Taki<'a> {
                     screen_name,
                     full_name,
                     full_name_trunc,
-                    guesses: 0
+                    score: INIT_SCORE
                 });
 
                 Some(format!("{}\n\n* {}", START_MESSAGES.choose(&mut self.rng).unwrap(), messages.join("\n* ")))
@@ -81,25 +81,20 @@ impl<'a> Taki<'a> {
                 Some(format!("Подозреваемые:\n{}", suspects))
             },
             (&Text(ref text), Some(ref mut game)) => {
-                let first_sep = text.find(' ').unwrap_or(text.len() - 1);
-                let extracted_screen_name: String = text.chars().take(first_sep).collect();
-                let extracted_full_name_trunc: String = text.chars().take(first_sep + 2).collect();
+                if text.starts_with(game.screen_name) || text.starts_with(game.full_name_trunc) {
+                    let reply = format!("{}\n{} +{}", WIN_MESSAGES.choose(&mut self.rng).unwrap(), message.sender, game.score);
 
-                let has_matched = extracted_screen_name == game.screen_name ||
-                    extracted_full_name_trunc == game.full_name_trunc;
-
-                if has_matched {
-                    let score = (MAX_GUESSES - game.guesses) as i32;
-                    self.storage.incr_in_set("scores", &message.sender, score).unwrap();
+                    self.storage.incr_in_set("scores", &message.sender, game.score).unwrap();
                     self.ongoing = None;
 
-                    Some(format!("{}\n{} +{}", WIN_MESSAGES.choose(&mut self.rng).unwrap(), message.sender, score))
+                    Some(reply)
                 }
                 else {
-                    game.guesses += 1;
+                    game.score -= 1;
 
-                    if game.guesses == MAX_GUESSES {
+                    if game.score == 0 {
                         let reply = format!("{}\nЭто был {} ({})", LOSE_MESSAGES.choose(&mut self.rng).unwrap(), game.full_name, game.screen_name);
+
                         self.ongoing = None;
 
                         Some(reply)

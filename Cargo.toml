@@ -6,6 +6,7 @@ edition = "2018"
 
 [build-dependencies]
 html5ever = "0.22"
+tendril = "0.4"
 
 [dependencies]
 rand = "0.6"

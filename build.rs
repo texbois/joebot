@@ -6,7 +6,16 @@ use html5ever::tree_builder::TreeBuilderOpts;
 use html5ever::rcdom::{Handle, NodeData, RcDom};
 use html5ever::tendril::TendrilSink;
 
+struct MessageData<'a> {
+    ignored_names: Vec<&'a str>,
+    full_names: HashMap<String, String>,
+    messages: HashMap<String, Vec<String>>
+}
+
 fn main() {
+    let ignored_names_csv = env::var("TAKI_IGNORE_NAMES").unwrap_or(String::new());
+    let ignored_names: Vec<&str> = ignored_names_csv.split(',').filter(|s| !s.is_empty()).collect();
+
     let mut messages_html = File::open("messages.html").unwrap();
 
     let opts = ParseOpts {
@@ -21,16 +30,15 @@ fn main() {
         .read_from(&mut messages_html)
         .unwrap();
 
-    let mut messages_by_name: HashMap<String, Vec<String>> = HashMap::new();
-    let mut full_names: HashMap<String, String> = HashMap::new();
+    let mut data = MessageData { messages: HashMap::new(), full_names: HashMap::new(), ignored_names };
 
-    retrieve_messages(dom.document, &mut messages_by_name, &mut full_names);
+    retrieve_messages(dom.document, &mut data);
 
     let out_dir = env::var("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("messages.rs");
     let mut f = File::create(&dest_path).unwrap();
 
-    generate_code(&mut f, &messages_by_name, &full_names).unwrap();
+    generate_code(&mut f, &data.messages, &data.full_names).unwrap();
 }
 
 fn trunc_full_name(full_name: &str) -> String {
@@ -70,10 +78,10 @@ fn generate_code<W: io::Write>(out: &mut W, messages: &HashMap<String, Vec<Strin
     Ok(())
 }
 
-fn retrieve_messages(node: Handle, messages: &mut HashMap<String, Vec<String>>, full_names: &mut HashMap<String, String>) {
+fn retrieve_messages(node: Handle, data: &mut MessageData) {
     if let NodeData::Element { ref name, ref attrs, ..  } = node.data {
         if name.local == local_name!("div") && class_attr_eq(&attrs.borrow(), "msg_item") {
-            insert_message(node, messages, full_names);
+            insert_message(node, data);
             return;
         }
         if name.local == local_name!("head") {
@@ -82,11 +90,11 @@ fn retrieve_messages(node: Handle, messages: &mut HashMap<String, Vec<String>>, 
     }
 
     for child in node.children.borrow().iter() {
-        retrieve_messages(child.clone(), messages, full_names);
+        retrieve_messages(child.clone(), data);
     }
 }
 
-fn insert_message(node: Handle, messages: &mut HashMap<String, Vec<String>>, full_names: &mut HashMap<String, String>) {
+fn insert_message(node: Handle, data: &mut MessageData) {
     let mut full_name = String::new();
     let mut screen_name = String::new();
     let mut msg_body = String::new();
@@ -122,15 +130,14 @@ fn insert_message(node: Handle, messages: &mut HashMap<String, Vec<String>>, ful
                 for body_child in child.children.borrow().iter() {
                     match body_child.data {
                         NodeData::Text { ref contents } => {
-                            msg_body = [msg_body, contents.borrow().to_string()].concat();
+                            msg_body += &contents.borrow();
                         },
                         NodeData::Element { ref name, ref attrs, .. } => {
                             if name.local == local_name!("div") && class_attr_eq(&attrs.borrow(), "emoji") {
-                                let alt = attr_value(&attrs.borrow(), local_name!("alt")).unwrap();
-                                msg_body = [msg_body, alt].concat();
+                                msg_body += &attr_value(&attrs.borrow(), local_name!("alt")).unwrap();
                             }
                             else if name.local == local_name!("br") {
-                                msg_body = [msg_body, "\n".to_string()].concat();
+                                msg_body += "\n";
                             }
                         },
                         _ => ()
@@ -140,16 +147,16 @@ fn insert_message(node: Handle, messages: &mut HashMap<String, Vec<String>>, ful
         }
     }
 
-    if msg_body != "" {
-        if !full_names.contains_key(&screen_name) {
-            full_names.insert(screen_name.clone(), full_name);
+    if msg_body != "" && !data.ignored_names.iter().any(|&ignored| ignored == screen_name) {
+        if !data.full_names.contains_key(&screen_name) {
+            data.full_names.insert(screen_name.clone(), full_name);
         }
 
-        if let Some(by_user) = messages.get_mut(&screen_name) {
+        if let Some(by_user) = data.messages.get_mut(&screen_name) {
             by_user.push(msg_body);
         }
         else {
-            messages.insert(screen_name, vec![msg_body]);
+            data.messages.insert(screen_name, vec![msg_body]);
         }
     }
 }
@@ -158,6 +165,6 @@ fn class_attr_eq(attrs: &Vec<html5ever::Attribute>, value: &str) -> bool {
     attrs.iter().any(|a| a.name.local == local_name!("class") && *a.value == *value)
 }
 
-fn attr_value(attrs: &Vec<html5ever::Attribute>, name: html5ever::LocalName) -> Option<String> {
-    attrs.iter().find(|a| a.name.local == name).map(|a| a.value.to_string())
+fn attr_value(attrs: &Vec<html5ever::Attribute>, name: html5ever::LocalName) -> Option<&tendril::StrTendril> {
+    attrs.iter().find(|a| a.name.local == name).map(|a| &a.value)
 }
