@@ -1,5 +1,5 @@
 use crate::{messages, storage, telegram::Message};
-use rand::{FromEntropy, seq::SliceRandom, rngs::SmallRng};
+use rand::{SeedableRng, seq::SliceRandom, rngs::SmallRng};
 
 const INIT_SCORE: i32 = 5;
 const MESSAGES_SHOWN: usize = 3;
@@ -34,7 +34,7 @@ struct OngoingGame {
 }
 
 impl<'a> Taki<'a> {
-    pub fn new(chat_id: i64, redis: &'a storage::Redis) -> Self {
+    pub fn new(chat_id: i64, redis: &'a mut storage::Redis) -> Self {
         Self {
             ongoing: None,
             storage: redis.get_game_storage("taki", chat_id),

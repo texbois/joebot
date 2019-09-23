@@ -5,7 +5,7 @@ pub struct Redis {
 }
 
 pub struct ChatGameStorage<'a> {
-    connection: &'a Connection,
+    connection: &'a mut Connection,
     key_prefix: String
 }
 
@@ -17,21 +17,21 @@ impl Redis {
         }
     }
 
-    pub fn get_game_storage<'a>(&'a self, game: &str, chat_id: i64) -> ChatGameStorage<'a> {
+    pub fn get_game_storage<'a>(&'a mut self, game: &str, chat_id: i64) -> ChatGameStorage<'a> {
         ChatGameStorage {
-            connection: &self.connection,
+            connection: &mut self.connection,
             key_prefix: format!("{}-{}", game, chat_id)
         }
     }
 }
-        
+
 impl<'a> ChatGameStorage<'a> {
-    pub fn incr_in_set(&self, set: &str, key: &str, by: i32) -> RedisResult<()> {
+    pub fn incr_in_set(&mut self, set: &str, key: &str, by: i32) -> RedisResult<()> {
         self.connection.zincr(
             format!("{}-{}", self.key_prefix, set), key, by)
     }
 
-    pub fn fetch_sorted_set(&self, set: &str) -> RedisResult<Vec<(String, i32)>> {
+    pub fn fetch_sorted_set(&mut self, set: &str) -> RedisResult<Vec<(String, i32)>> {
         self.connection.zrevrangebyscore_withscores(
             format!("{}-{}", self.key_prefix, set), std::i32::MAX, std::i32::MIN)
     }

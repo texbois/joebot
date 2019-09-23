@@ -12,14 +12,14 @@ fn main() {
     let bot_chat_id: i64 = std::env::var("CHAT_ID").ok().and_then(|id| id.parse().ok())
         .expect("Provide the bot's chatroom id via the CHAT_ID environment variable");
 
-    let redis = storage::Redis::new("redis://127.0.0.1/");
+    let mut redis = storage::Redis::new("redis://127.0.0.1/");
 
     let telegram = telegram::Telegram::new(&bot_token);
     let bot_name = telegram.get_bot_username().unwrap();
 
     println!("@{} is ready. Polling for incoming messages from chat #{}", bot_name, bot_chat_id);
 
-    let mut game = taki::Taki::new(bot_chat_id, &redis);
+    let mut game = taki::Taki::new(bot_chat_id, &mut redis);
 
     for message in telegram.poll_messages() {
         if message.chat_id != bot_chat_id {
