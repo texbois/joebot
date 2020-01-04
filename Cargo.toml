@@ -4,11 +4,8 @@ version = "0.1.0"
 authors = ["band-of-four"]
 edition = "2018"
 
-[build-dependencies]
-html5ever = "0.24"
-tendril = "0.4"
-
 [dependencies]
+vkopt-message-parser = { git = "https://github.com/texbois/vkopt-message-parser" }
 rand = { version = "0.7", features = ["small_rng"] }
 reqwest = "0.9"
 serde = "1.0"
