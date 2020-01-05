@@ -18,14 +18,14 @@ pub struct Message {
 }
 
 pub struct Telegram {
-    client: reqwest::Client,
+    client: reqwest::blocking::Client,
     api_root: String
 }
 
 impl Telegram {
     pub fn new(token: &str) -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: reqwest::blocking::Client::new(),
             api_root: format!("https://api.telegram.org/bot{}/", token)
         }
     }
@@ -47,7 +47,7 @@ impl Telegram {
         long_poll::MessagePoller::new(self)
     }
 
-    fn api_method(&self, method: &str, payload: Option<serde_json::Value>) -> reqwest::RequestBuilder {
+    fn api_method(&self, method: &str, payload: Option<serde_json::Value>) -> reqwest::blocking::RequestBuilder {
         let req = self.client.get(&[&self.api_root, method].concat());
 
         match payload {

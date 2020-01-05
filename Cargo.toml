@@ -1,17 +1,17 @@
 [package]
 name = "joebot"
 version = "0.1.0"
-authors = ["band-of-four"]
+authors = ["texbois"]
 edition = "2018"
 
 [dependencies]
 vkopt-message-parser = { git = "https://github.com/texbois/vkopt-message-parser" }
 rand = { version = "0.7", features = ["small_rng"] }
-reqwest = "0.9"
+reqwest = { version = "0.10", features = ["blocking", "json"] }
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
-redis = "0.12"
+redis = "0.13"
 
 [profile.release]
 opt-level = 2
