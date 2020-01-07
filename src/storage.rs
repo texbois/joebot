@@ -1,38 +1,41 @@
-use redis::{Commands, Client, Connection, RedisResult};
+use redis::{Client, Commands, Connection, RedisResult};
 
 pub struct Redis {
-    connection: Connection
+    connection: Connection,
 }
 
 pub struct ChatGameStorage<'a> {
     connection: &'a mut Connection,
-    key_prefix: String
+    key_prefix: String,
 }
 
 impl Redis {
-    pub fn new(redis_url: &str) -> Self {
-        let client = Client::open(redis_url).unwrap();
-        Self {
-            connection: client.get_connection().unwrap()
-        }
+    pub fn new(redis_url: &str) -> RedisResult<Self> {
+        let client = Client::open(redis_url)?;
+        Ok(Self {
+            connection: client.get_connection()?,
+        })
     }
 
     pub fn get_game_storage<'a>(&'a mut self, game: &str, chat_id: i64) -> ChatGameStorage<'a> {
         ChatGameStorage {
             connection: &mut self.connection,
-            key_prefix: format!("{}-{}", game, chat_id)
+            key_prefix: format!("{}-{}", game, chat_id),
         }
     }
 }
 
 impl<'a> ChatGameStorage<'a> {
     pub fn incr_in_set(&mut self, set: &str, key: &str, by: i32) -> RedisResult<()> {
-        self.connection.zincr(
-            format!("{}-{}", self.key_prefix, set), key, by)
+        self.connection
+            .zincr(format!("{}-{}", self.key_prefix, set), key, by)
     }
 
     pub fn fetch_sorted_set(&mut self, set: &str) -> RedisResult<Vec<(String, i32)>> {
         self.connection.zrevrangebyscore_withscores(
-            format!("{}-{}", self.key_prefix, set), std::i32::MAX, std::i32::MIN)
+            format!("{}-{}", self.key_prefix, set),
+            std::i32::MAX,
+            std::i32::MIN,
+        )
     }
 }

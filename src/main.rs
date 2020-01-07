@@ -19,13 +19,14 @@ fn main() {
 
     match run(bot_token, bot_chat_id) {
         Ok(_) => println!("Good night, sweet prince."),
-        Err(e) => eprintln!("Error: {}", e)
+        Err(e) => eprintln!("Error: {}", e),
     }
 }
 
 fn run(bot_token: String, bot_chat_id: i64) -> JoeResult<()> {
     let messages = messages::MessageDump::from_file("messages.html");
-    let mut redis = storage::Redis::new("redis://127.0.0.1/");
+    let mut redis =
+        storage::Redis::new("redis://127.0.0.1/").map_err(|e| format!("redis: {}", e))?;
 
     let telegram = telegram::Telegram::new(&bot_token);
     let bot_name = telegram.get_bot_username()?;
