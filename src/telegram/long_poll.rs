@@ -2,22 +2,18 @@ use serde_json::json;
 
 use crate::telegram::{Message, MessageContents, Telegram};
 
-pub fn do_poll<F: FnMut(Message) -> bool>(client: &Telegram, mut callback: F) {
+pub fn do_poll<F: FnMut(Message) -> crate::JoeResult<()>>(
+    client: &Telegram,
+    mut callback: F,
+) -> crate::JoeResult<()> {
     let mut update_offset = 0;
-    'poller: loop {
-        let resp: serde_json::Value = client
-            .api_method(
-                "getUpdates",
-                Some(json!({
-                    "timeout": 25,
-                    "allowed_updates": ["message"],
-                    "offset": update_offset + 1
-                })),
-            )
-            .send()
-            .unwrap()
-            .json()
-            .unwrap();
+    loop {
+        let payload = Some(json!({
+            "timeout": 25,
+            "allowed_updates": ["message"],
+            "offset": update_offset + 1
+        }));
+        let resp: serde_json::Value = client.api_method("getUpdates", payload).send()?.json()?;
 
         if let Some(last_update_id) = resp["result"]
             .as_array()
@@ -34,9 +30,7 @@ pub fn do_poll<F: FnMut(Message) -> bool>(client: &Telegram, mut callback: F) {
             .filter_map(parse_text_message);
 
         for message in messages {
-            if !callback(message) {
-                break 'poller;
-            }
+            callback(message)?;
         }
     }
 }
