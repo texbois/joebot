@@ -27,9 +27,9 @@ fn main() {
 
     let mut game = taki::Taki::new(&messages, bot_chat_id, &mut redis);
 
-    for message in telegram.poll_messages() {
+    telegram.poll_messages(|message| {
         if message.chat_id != bot_chat_id {
-            continue;
+            return true;
         }
         if let telegram::MessageContents::Command {
             receiver: Some(ref receiver_name),
@@ -37,12 +37,13 @@ fn main() {
         } = message.contents
         {
             if receiver_name != &bot_name {
-                continue;
+                return true;
             }
         }
 
         if let Some(reply) = game.process_with_reply(&message) {
             telegram.send_message(bot_chat_id, &reply).unwrap();
         }
-    }
+        return true;
+    });
 }

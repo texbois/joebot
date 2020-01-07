@@ -43,8 +43,8 @@ impl Telegram {
         Ok(())
     }
 
-    pub fn poll_messages(&self) -> long_poll::MessagePoller {
-        long_poll::MessagePoller::new(self)
+    pub fn poll_messages<F: FnMut(Message) -> bool>(&self, callback: F) {
+        long_poll::do_poll(&self, callback);
     }
 
     fn api_method(&self, method: &str, payload: Option<serde_json::Value>) -> reqwest::blocking::RequestBuilder {

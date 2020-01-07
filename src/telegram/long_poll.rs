@@ -1,46 +1,43 @@
-use std::collections::VecDeque;
 use serde_json::json;
 
-use crate::telegram::{Telegram, Message, MessageContents};
+use crate::telegram::{Message, MessageContents, Telegram};
 
-pub struct MessagePoller<'a> {
-    client: &'a Telegram,
-    message_queue: VecDeque<Message>,
-    update_offset: u64
-}
+pub fn do_poll<F: FnMut(Message) -> bool>(client: &Telegram, mut callback: F) {
+    let mut update_offset = 0;
+    'poller: loop {
+        let resp: serde_json::Value = client
+            .api_method(
+                "getUpdates",
+                Some(json!({
+                    "timeout": 25,
+                    "allowed_updates": ["message"],
+                    "offset": update_offset + 1
+                })),
+            )
+            .send()
+            .unwrap()
+            .json()
+            .unwrap();
 
-impl<'a> Iterator for MessagePoller<'a> {
-    type Item = Message;
-
-    fn next(&mut self) -> Option<Message> {
-        while self.message_queue.is_empty() {
-            self.poll_updates();
+        if let Some(last_update_id) = resp["result"]
+            .as_array()
+            .and_then(|u| u.last())
+            .and_then(|u| u["update_id"].as_u64())
+        {
+            update_offset = last_update_id;
         }
-        self.message_queue.pop_front()
-    }
-}
 
-impl<'a> MessagePoller<'a> {
-    pub fn new(client: &'a Telegram) -> Self {
-        Self { client, message_queue: VecDeque::new(), update_offset: 0 }
-    }
+        let messages = resp["result"]
+            .as_array()
+            .unwrap()
+            .into_iter()
+            .filter_map(parse_text_message);
 
-    fn poll_updates(&mut self) {
-        let resp: serde_json::Value = self.client
-            .api_method("getUpdates", Some(json!({
-                "timeout": 25,
-                "allowed_updates": ["message"],
-                "offset": self.update_offset + 1
-            })))
-            .send().unwrap()
-            .json().unwrap();
-
-        if let Some(last_update_id) = resp["result"].as_array().and_then(|u| u.last()).and_then(|u| u["update_id"].as_u64()) {
-            self.update_offset = last_update_id;
+        for message in messages {
+            if !callback(message) {
+                break 'poller;
+            }
         }
-   
-        self.message_queue.extend(resp["result"].as_array().unwrap()
-            .into_iter().filter_map(parse_text_message));
     }
 }
 
@@ -52,33 +49,45 @@ fn parse_text_message(update_obj: &serde_json::Value) -> Option<Message> {
     /* If the current message contains a "text" field, it also has { from: { ... } } */
 
     let from_obj = message_obj.get("from")?;
-    let sender = from_obj.get("username")
-        .and_then(|u| u.as_str()).map(|n| n.to_owned())
+    let sender = from_obj
+        .get("username")
+        .and_then(|u| u.as_str())
+        .map(|n| n.to_owned())
         .or_else(|| {
             let first_name = from_obj.get("first_name")?.as_str()?;
             let last_name = from_obj.get("last_name")?.as_str()?;
             Some([first_name, " ", last_name].concat())
         })?;
 
-    let bot_command = message_obj.get("entities")
+    let bot_command = message_obj
+        .get("entities")
         .and_then(|es| es.as_array())
-        .and_then(|es| es.iter().find(|e| e["type"] == "bot_command" && e["offset"] == 0))
+        .and_then(|es| {
+            es.iter()
+                .find(|e| e["type"] == "bot_command" && e["offset"] == 0)
+        })
         .and_then(|e| {
             let cmd_len = e["length"].as_u64().unwrap() as usize;
 
-            match &text[1 /* skip forward slash */..cmd_len].split('@').collect::<Vec<_>>()[..] {
+            match &text[1 /* skip forward slash */..cmd_len]
+                .split('@')
+                .collect::<Vec<_>>()[..]
+            {
                 &[cmd] => Some((cmd.to_owned(), None)),
                 &[cmd, receiver] => Some((cmd.to_owned(), Some(receiver.to_owned()))),
-                _ => None
+                _ => None,
             }
         });
 
     let contents = if let Some((command, receiver)) = bot_command {
         MessageContents::Command { command, receiver }
-    }
-    else {
+    } else {
         MessageContents::Text(text.to_owned())
     };
 
-    Some(Message { chat_id, sender, contents })
+    Some(Message {
+        chat_id,
+        sender,
+        contents,
+    })
 }
