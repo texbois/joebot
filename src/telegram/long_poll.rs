@@ -113,42 +113,117 @@ mod tests {
 
     #[test]
     fn test_poll_message() {
-        let resp = json!({
-            "ok": true,
-            "result": [
-                {
-                    "message": {
-                        "chat": {
-                            "first_name": "Jill",
-                            "id": 100,
-                            "type": "private",
-                            "username": "changelivesjill"
-                        },
-                        "date": 3249849600i64,
-                        "from": {
-                            "first_name": "Jill",
-                            "id": 100,
-                            "is_bot": false,
-                            "language_code": "en",
-                            "username": "changelivesjill"
-                        },
-                        "message_id": 1000,
-                        "text": "hey"
+        let resp = json!({"ok": true, "result": [
+            {
+                "message": {
+                    "chat": {
+                        "first_name": "Jill",
+                        "id": 100,
+                        "type": "private",
+                        "username": "Shadowmaster69"
                     },
-                    "update_id": 10000
-                }
-            ]
-        });
+                    "date": 3249849600i64,
+                    "from": {
+                        "first_name": "Jill",
+                        "id": 100,
+                        "is_bot": false,
+                        "language_code": "en",
+                        "username": "Shadowmaster69"
+                    },
+                    "message_id": 1000,
+                    "text": "ice cream"
+                },
+                "update_id": 10000
+            }
+        ]});
         let mut messages: Vec<Message> = Vec::new();
         let update_id = process_poll_response(resp, &mut |msg| Ok(messages.push(msg))).unwrap();
-        assert_eq!(update_id, 10000);
+        assert_eq!(update_id, Some(10000));
         assert_eq!(
             messages,
             vec![Message {
                 chat_id: 100,
-                sender: "changelivesjill".into(),
-                contents: MessageContents::Text("hey".into())
+                sender: "Shadowmaster69".into(),
+                contents: MessageContents::Text("ice cream".into())
             }]
+        );
+    }
+
+    #[test]
+    fn test_poll_bot_command() {
+        let resp = json!({"ok": true, "result": [
+            {
+                "message": {
+                    "chat": {
+                        "first_name": "Dana",
+                        "last_name": "Zane",
+                        "id": 200,
+                        "type": "private",
+                    },
+                    "date": 3249849800i64,
+                    "entities": [
+                        {"length": 15, "offset": 0, "type": "bot_command"}
+                    ],
+                    "from":{
+                        "first_name": "Dana",
+                        "last_name": "Zane",
+                        "id": 200,
+                        "is_bot": false,
+                        "language_code": "en",
+                    },
+                    "message_id": 3000,
+                    "text":"/start@corgibot"
+                },
+                "update_id": 10000
+            },
+            {
+                "message": {
+                    "chat": {
+                        "first_name": "Dana",
+                        "last_name": "Zane",
+                        "id": 200,
+                        "type": "private",
+                    },
+                    "date": 3249860000i64,
+                    "entities":[
+                        {"length": 6, "offset": 0, "type" :"bot_command"}
+                    ],
+                    "from": {
+                        "first_name": "Dana",
+                        "last_name": "Zane",
+                        "id": 200,
+                        "is_bot": false,
+                        "language_code": "en",
+                    },
+                    "message_id": 3001,
+                    "text": "/start"
+                },
+                "update_id": 10001
+            }
+        ]});
+        let mut messages: Vec<Message> = Vec::new();
+        let update_id = process_poll_response(resp, &mut |msg| Ok(messages.push(msg))).unwrap();
+        assert_eq!(update_id, Some(10001));
+        assert_eq!(
+            messages,
+            vec![
+                Message {
+                    chat_id: 200,
+                    sender: "Dana Zane".into(),
+                    contents: MessageContents::Command {
+                        command: "start".into(),
+                        receiver: Some("corgibot".into())
+                    }
+                },
+                Message {
+                    chat_id: 200,
+                    sender: "Dana Zane".into(),
+                    contents: MessageContents::Command {
+                        command: "start".into(),
+                        receiver: None
+                    }
+                }
+            ]
         );
     }
 }
