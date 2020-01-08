@@ -3,7 +3,7 @@ use serde_json::json;
 
 mod long_poll;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum MessageContents {
     Text(String),
     Command {
@@ -12,7 +12,7 @@ pub enum MessageContents {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Message {
     pub chat_id: i64,
     pub sender: String,

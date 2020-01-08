@@ -14,32 +14,49 @@ pub fn do_poll<F: FnMut(Message) -> crate::JoeResult<()>>(
             "offset": update_offset + 1
         }));
         let resp: serde_json::Value = client.api_method("getUpdates", payload).send()?.json()?;
-
-        if let Some(last_update_id) = resp["result"]
-            .as_array()
-            .and_then(|u| u.last())
-            .and_then(|u| u["update_id"].as_u64())
-        {
-            update_offset = last_update_id;
-        }
-
-        let messages = resp["result"]
-            .as_array()
-            .unwrap()
-            .into_iter()
-            .filter_map(parse_text_message);
-
-        for message in messages {
-            callback(message)?;
-        }
+        update_offset = process_poll_response(resp, &mut callback)?;
     }
 }
 
-fn parse_text_message(update_obj: &serde_json::Value) -> Option<Message> {
-    let message_obj = update_obj.get("message")?;
+fn process_poll_response<F: FnMut(Message) -> crate::JoeResult<()>>(
+    mut resp: serde_json::Value,
+    callback: &mut F,
+) -> crate::JoeResult<u64> {
+    let last_update_id = resp["result"]
+        .as_array()
+        .and_then(|u| u.last())
+        .and_then(|u| u["update_id"].as_u64())
+        .ok_or(format!(
+            "Long poll response does not contain \"update_id\": {}",
+            resp
+        ))?;
+
+    let messages = match resp["result"].take() {
+        serde_json::Value::Array(msgs) => msgs.into_iter().filter_map(parse_text_message),
+        res => {
+            return Err(format!(
+                "Invalid long poll [\"result\"]: {}\nFull response: {}",
+                res, resp
+            )
+            .into())
+        }
+    };
+
+    for message in messages {
+        callback(message)?;
+    }
+
+    Ok(last_update_id)
+}
+
+fn parse_text_message(mut update_obj: serde_json::Value) -> Option<Message> {
+    let mut message_obj = update_obj.get_mut("message")?.take();
 
     let chat_id = message_obj.get("chat")?.get("id")?.as_i64()?;
-    let text = message_obj.get("text")?.as_str()?;
+    let text = match message_obj.get_mut("text").map(serde_json::Value::take) {
+        Some(serde_json::Value::String(text)) => Some(text),
+        _ => None,
+    }?;
     /* If the current message contains a "text" field, it also has { from: { ... } } */
 
     let from_obj = message_obj.get("from")?;
@@ -84,4 +101,50 @@ fn parse_text_message(update_obj: &serde_json::Value) -> Option<Message> {
         sender,
         contents,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_poll_message() {
+        let resp = json!({
+            "ok": true,
+            "result": [
+                {
+                    "message": {
+                        "chat": {
+                            "first_name": "Jill",
+                            "id": 100,
+                            "type": "private",
+                            "username": "changelivesjill"
+                        },
+                        "date": 3249849600i64,
+                        "from": {
+                            "first_name": "Jill",
+                            "id": 100,
+                            "is_bot": false,
+                            "language_code": "en",
+                            "username": "changelivesjill"
+                        },
+                        "message_id": 1000,
+                        "text": "hey"
+                    },
+                    "update_id": 10000
+                }
+            ]
+        });
+        let mut messages: Vec<Message> = Vec::new();
+        let update_id = process_poll_response(resp, &mut |msg| Ok(messages.push(msg))).unwrap();
+        assert_eq!(update_id, 10000);
+        assert_eq!(
+            messages,
+            vec![Message {
+                chat_id: 100,
+                sender: "changelivesjill".into(),
+                contents: MessageContents::Text("hey".into())
+            }]
+        );
+    }
 }
