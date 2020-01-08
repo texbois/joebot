@@ -5,6 +5,7 @@ authors = ["texbois"]
 edition = "2018"
 
 [dependencies]
+joebot-markov-chain = { git = "https://github.com/texbois/joebot-markov-chain" }
 vkopt-message-parser = { git = "https://github.com/texbois/vkopt-message-parser" }
 rand = { version = "0.7", features = ["small_rng"] }
 reqwest = { version = "0.10", features = ["blocking", "json"] }

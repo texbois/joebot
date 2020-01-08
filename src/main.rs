@@ -1,12 +1,15 @@
+use serde_json;
 use std::error::Error;
+use std::fs::File;
 
 pub type JoeResult<T> = Result<T, Box<dyn Error>>;
 pub enum HandlerResult {
     Unhandled,
     NoResponse,
-    Response(String)
+    Response(String),
 }
 
+mod chain;
 mod messages;
 mod storage;
 mod taki;
@@ -16,6 +19,7 @@ struct JoeConfig {
     bot_token: String,
     bot_chat_id: i64,
     messages: messages::MessageDump,
+    chain: joebot_markov_chain::chain::MarkovChain,
 }
 
 fn main() {
@@ -28,6 +32,8 @@ fn main() {
     let taki_ignore_names: Vec<String> = std::env::var("TAKI_IGNORE_NAMES")
         .map(|v| v.split(",").map(|n| n.to_owned()).collect())
         .unwrap_or(Vec::new());
+    let chain: joebot_markov_chain::chain::MarkovChain =
+        serde_json::from_reader(File::open("chain.json").unwrap()).unwrap();
 
     let messages = messages::MessageDump::from_file("messages.html", &taki_ignore_names);
     let message_authors = messages
@@ -46,6 +52,7 @@ fn main() {
         bot_token,
         bot_chat_id,
         messages,
+        chain,
     };
 
     match run(&config) {
@@ -79,13 +86,21 @@ fn run(config: &JoeConfig) -> JoeResult<()> {
             ..
         } if receiver_name != &bot_name => Ok(()),
         msg => {
-            match game.handle_message(&msg) {
-                HandlerResult::Response(r) => telegram.send_message(config.bot_chat_id, &r)?,
-                HandlerResult::NoResponse => {}
-                HandlerResult::Unhandled => {
-                    unimplemented!()
+            use HandlerResult::*;
+            let reply = match game.handle_message(&msg) {
+                Response(r) => Some(r),
+                Unhandled => {
+                    if let Response(r) = chain::handle_command(&msg, &config.chain) {
+                        Some(r)
+                    } else {
+                        None
+                    }
                 }
+                _ => None,
             };
+            if let Some(r) = reply {
+                telegram.send_message(config.bot_chat_id, &r)?;
+            }
             Ok(())
         }
     })
