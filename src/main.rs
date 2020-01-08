@@ -1,6 +1,11 @@
 use std::error::Error;
 
 pub type JoeResult<T> = Result<T, Box<dyn Error>>;
+pub enum HandlerResult {
+    Unhandled,
+    NoResponse,
+    Response(String)
+}
 
 mod messages;
 mod storage;
@@ -74,9 +79,13 @@ fn run(config: &JoeConfig) -> JoeResult<()> {
             ..
         } if receiver_name != &bot_name => Ok(()),
         msg => {
-            if let Some(reply) = game.process_with_reply(&msg) {
-                telegram.send_message(bot_chat_id, &reply)?;
-            }
+            match game.handle_message(&msg) {
+                HandlerResult::Response(r) => telegram.send_message(config.bot_chat_id, &r)?,
+                HandlerResult::NoResponse => {}
+                HandlerResult::Unhandled => {
+                    unimplemented!()
+                }
+            };
             Ok(())
         }
     })

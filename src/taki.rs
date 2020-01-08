@@ -3,6 +3,7 @@ use crate::{
     storage, telegram,
 };
 use rand::{rngs::SmallRng, seq::SliceRandom, SeedableRng};
+use crate::HandlerResult;
 
 const INIT_SCORE: i32 = 5;
 const MESSAGES_SHOWN: usize = 3;
@@ -48,7 +49,7 @@ impl<'a> Taki<'a> {
         }
     }
 
-    pub fn process_with_reply(&mut self, message: &telegram::Message) -> Option<String> {
+    pub fn handle_message(&mut self, message: &telegram::Message) -> HandlerResult {
         use crate::telegram::MessageContents::*;
 
         match (&message.contents, &mut self.ongoing) {
@@ -61,7 +62,7 @@ impl<'a> Taki<'a> {
                 });
                 let (start_prefix, start_suffix) = START_MESSAGES.choose(&mut self.rng).unwrap();
 
-                Some(format!(
+                HandlerResult::Response(format!(
                     "{}\n\n* {}\n\n{}",
                     start_prefix,
                     messages.join("\n* "),
@@ -79,11 +80,11 @@ impl<'a> Taki<'a> {
                     .collect::<Vec<_>>()
                     .join("\n");
 
-                Some(format!("Статы:\n{}", stats))
+                HandlerResult::Response(format!("Статы:\n{}", stats))
             }
             (&Command { ref command, .. }, _) if command == "takisuspects" => {
                 let suspects = list_suspects(self.messages).join("\n");
-                Some(format!("Подозреваемые:\n{}", suspects))
+                HandlerResult::Response(format!("Подозреваемые:\n{}", suspects))
             }
             (&Text(ref text), Some(ref mut game)) => {
                 let text_lower = text.to_lowercase();
@@ -101,7 +102,7 @@ impl<'a> Taki<'a> {
                         .unwrap();
                     self.ongoing = None;
 
-                    Some(reply)
+                    HandlerResult::Response(reply)
                 } else {
                     game.score -= 1;
 
@@ -115,13 +116,13 @@ impl<'a> Taki<'a> {
 
                         self.ongoing = None;
 
-                        Some(reply)
+                        HandlerResult::Response(reply)
                     } else {
-                        None
+                        HandlerResult::NoResponse
                     }
                 }
             }
-            _ => None,
+            _ => HandlerResult::Unhandled,
         }
     }
 }
