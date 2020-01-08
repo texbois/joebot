@@ -36,23 +36,21 @@ fn run(bot_token: String, bot_chat_id: i64) -> JoeResult<()> {
 
     let mut game = taki::Taki::new(&messages, bot_chat_id, &mut redis);
 
-    telegram.poll_messages(|message| {
-        if message.chat_id != bot_chat_id {
-            return Ok(());
-        }
-        if let telegram::MessageContents::Command {
-            receiver: Some(ref receiver_name),
+    telegram.poll_messages(|message| match message {
+        telegram::Message { chat_id, .. } if chat_id != bot_chat_id => Ok(()),
+        telegram::Message {
+            contents:
+                telegram::MessageContents::Command {
+                    receiver: Some(ref receiver_name),
+                    ..
+                },
             ..
-        } = message.contents
-        {
-            if receiver_name != &bot_name {
-                return Ok(());
+        } if receiver_name != &bot_name => Ok(()),
+        msg => {
+            if let Some(reply) = game.process_with_reply(&msg) {
+                telegram.send_message(bot_chat_id, &reply)?;
             }
+            Ok(())
         }
-
-        if let Some(reply) = game.process_with_reply(&message) {
-            telegram.send_message(bot_chat_id, &reply)?;
-        }
-        Ok(())
     })
 }
