@@ -17,8 +17,3 @@ multiple names, too, just separate them with commas. Example command:
 ```
 TAKI_IGNORE_NAMES="id1,id2,custom_name" cargo build --release
 ```
-
-## Why Telegram?
-
-Joe was initially developed as a VK chat bot. However, the site's administration
-[forbids sending messages from the server](https://vk.com/faq13567).

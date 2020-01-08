@@ -1,5 +1,3 @@
-#![feature(slice_patterns)]
-
 use std::error::Error;
 
 pub type JoeResult<T> = Result<T, Box<dyn Error>>;
