@@ -81,14 +81,22 @@ fn parse_text_message(mut update_obj: serde_json::Value) -> Option<Message> {
                 .split('@')
                 .collect::<Vec<_>>()[..]
             {
-                &[cmd] => Some((cmd.to_owned(), None)),
-                &[cmd, receiver] => Some((cmd.to_owned(), Some(receiver.to_owned()))),
+                &[cmd] => Some((cmd.to_owned(), None, text[cmd_len..].to_owned())),
+                &[cmd, receiver] => Some((
+                    cmd.to_owned(),
+                    Some(receiver.to_owned()),
+                    text[cmd_len..].to_owned(),
+                )),
                 _ => None,
             }
         });
 
-    let contents = if let Some((command, receiver)) = bot_command {
-        MessageContents::Command { command, receiver }
+    let contents = if let Some((command, receiver, rest)) = bot_command {
+        MessageContents::Command {
+            command,
+            receiver,
+            rest,
+        }
     } else {
         MessageContents::Text(text)
     };
@@ -198,7 +206,7 @@ mod tests {
                         "language_code": "en",
                     },
                     "message_id": 3001,
-                    "text": "/start"
+                    "text": "/start microwave"
                 },
                 "update_id": 10001
             }
@@ -214,7 +222,8 @@ mod tests {
                     sender: "Dana Zane".into(),
                     contents: MessageContents::Command {
                         command: "start".into(),
-                        receiver: Some("corgibot".into())
+                        receiver: Some("corgibot".into()),
+                        rest: String::new()
                     }
                 },
                 Message {
@@ -222,7 +231,8 @@ mod tests {
                     sender: "Dana Zane".into(),
                     contents: MessageContents::Command {
                         command: "start".into(),
-                        receiver: None
+                        receiver: None,
+                        rest: " microwave".into()
                     }
                 }
             ]

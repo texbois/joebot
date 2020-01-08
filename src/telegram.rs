@@ -9,6 +9,7 @@ pub enum MessageContents {
     Command {
         command: String,
         receiver: Option<String>,
+        rest: String
     },
 }
 
