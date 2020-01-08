@@ -45,25 +45,27 @@ fn process_poll_response<F: FnMut(Message) -> crate::JoeResult<()>>(
 }
 
 fn parse_text_message(mut update_obj: serde_json::Value) -> Option<Message> {
-    let mut message_obj = update_obj.get_mut("message")?.take();
+    let mut message_obj = match update_obj["message"].take() {
+        serde_json::Value::Object(obj) => obj,
+        _ => return None,
+    };
 
-    let chat_id = message_obj.get("chat")?.get("id")?.as_i64()?;
-    let text = match message_obj.get_mut("text").map(serde_json::Value::take) {
-        Some(serde_json::Value::String(text)) => Some(text),
-        _ => None,
-    }?;
-    /* If the current message contains a "text" field, it also has { from: { ... } } */
+    let chat_id = message_obj["chat"]["id"].as_i64()?;
 
-    let from_obj = message_obj.get("from")?;
-    let sender = from_obj
-        .get("username")
-        .and_then(|u| u.as_str())
-        .map(|n| n.to_owned())
-        .or_else(|| {
-            let first_name = from_obj.get("first_name")?.as_str()?;
-            let last_name = from_obj.get("last_name")?.as_str()?;
-            Some([first_name, " ", last_name].concat())
-        })?;
+    let text = match message_obj["text"].take() {
+        serde_json::Value::String(text) => text,
+        _ => return None,
+    };
+
+    let sender = match message_obj["from"]["username"].take() {
+        serde_json::Value::String(username) => username,
+        _ => [
+            message_obj["from"]["first_name"].as_str()?,
+            " ",
+            message_obj["from"]["last_name"].as_str()?,
+        ]
+        .concat(),
+    };
 
     let bot_command = message_obj
         .get("entities")
@@ -88,7 +90,7 @@ fn parse_text_message(mut update_obj: serde_json::Value) -> Option<Message> {
     let contents = if let Some((command, receiver)) = bot_command {
         MessageContents::Command { command, receiver }
     } else {
-        MessageContents::Text(text.to_owned())
+        MessageContents::Text(text)
     };
 
     Some(Message {
