@@ -14,39 +14,34 @@ pub fn do_poll<F: FnMut(Message) -> crate::JoeResult<()>>(
             "offset": update_offset + 1
         }));
         let resp: serde_json::Value = client.api_method("getUpdates", payload).send()?.json()?;
-        update_offset = process_poll_response(resp, &mut callback)?;
+        if let Some(update_id) = process_poll_response(resp, &mut callback)? {
+            update_offset = update_id;
+        }
     }
 }
 
 fn process_poll_response<F: FnMut(Message) -> crate::JoeResult<()>>(
     mut resp: serde_json::Value,
     callback: &mut F,
-) -> crate::JoeResult<u64> {
-    let last_update_id = resp["result"]
-        .as_array()
-        .and_then(|u| u.last())
-        .and_then(|u| u["update_id"].as_u64())
-        .ok_or(format!(
-            "Long poll response does not contain \"update_id\": {}",
-            resp
-        ))?;
-
-    let messages = match resp["result"].take() {
-        serde_json::Value::Array(msgs) => msgs.into_iter().filter_map(parse_text_message),
-        res => {
-            return Err(format!(
-                "Invalid long poll [\"result\"]: {}\nFull response: {}",
-                res, resp
-            )
-            .into())
-        }
+) -> crate::JoeResult<Option<u64>> {
+    let updates = match resp["result"].take() {
+        serde_json::Value::Array(entries) => entries,
+        _ => return Err(format!("Invalid response: {}", resp).into()),
     };
 
-    for message in messages {
+    let update_id = if let Some(last_update) = updates.last() {
+        last_update["update_id"]
+            .as_u64()
+            .ok_or(format!("Missing update_id: {}", resp))?
+    } else {
+        return Ok(None);
+    };
+
+    for message in updates.into_iter().filter_map(parse_text_message) {
         callback(message)?;
     }
 
-    Ok(last_update_id)
+    Ok(Some(update_id))
 }
 
 fn parse_text_message(mut update_obj: serde_json::Value) -> Option<Message> {
@@ -106,6 +101,15 @@ fn parse_text_message(mut update_obj: serde_json::Value) -> Option<Message> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_poll_empty() {
+        let resp = json!({"ok": true, "result": []});
+        let mut messages: Vec<Message> = Vec::new();
+        let update_id = process_poll_response(resp, &mut |msg| Ok(messages.push(msg))).unwrap();
+        assert!(update_id.is_none());
+        assert!(messages.is_empty());
+    }
 
     #[test]
     fn test_poll_message() {
