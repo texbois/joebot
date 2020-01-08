@@ -52,7 +52,7 @@ fn parse_text_message(mut update_obj: serde_json::Value) -> Option<Message> {
 
     let chat_id = message_obj["chat"]["id"].as_i64()?;
 
-    let text = match message_obj["text"].take() {
+    let text = match message_obj.get_mut("text")?.take() {
         serde_json::Value::String(text) => text,
         _ => return None,
     };
@@ -227,5 +227,38 @@ mod tests {
                 }
             ]
         );
+    }
+
+    #[test]
+    fn test_message_without_text() {
+        let resp = json!({"ok": true, "result": [
+            {
+                "message": {
+                    "chat": {
+                        "first_name": "Jill",
+                        "id": 100,
+                        "type": "private",
+                        "username": "Shadowmaster69"
+                    },
+                    "date": 3249849600i64,
+                    "from": {
+                        "first_name": "Jill",
+                        "id": 100,
+                        "is_bot": false,
+                        "language_code": "en",
+                        "username": "Shadowmaster69"
+                    },
+                    "message_id": 1000,
+                    "photo": [
+                        {"file_id":"h","file_size": 30933, "file_unique_id": "hh", "height": 320, "width": 276}
+                    ]
+                },
+                "update_id": 10000
+            }
+        ]});
+        let mut messages: Vec<Message> = Vec::new();
+        let update_id = process_poll_response(resp, &mut |msg| Ok(messages.push(msg))).unwrap();
+        assert!(messages.is_empty());
+        assert_eq!(update_id, Some(10000));
     }
 }
