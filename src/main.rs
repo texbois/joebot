@@ -19,7 +19,7 @@ struct JoeConfig {
     bot_token: String,
     bot_chat_id: i64,
     messages: messages::MessageDump,
-    chain: joebot_markov_chain::chain::MarkovChain,
+    chain: joebot_markov_chain::MarkovChain,
 }
 
 fn main() {
@@ -32,7 +32,7 @@ fn main() {
     let taki_ignore_names: Vec<String> = std::env::var("TAKI_IGNORE_NAMES")
         .map(|v| v.split(",").map(|n| n.to_owned()).collect())
         .unwrap_or(Vec::new());
-    let chain: joebot_markov_chain::chain::MarkovChain =
+    let chain: joebot_markov_chain::MarkovChain =
         serde_json::from_reader(File::open("chain.json").unwrap()).unwrap();
 
     let messages = messages::MessageDump::from_file("messages.html", &taki_ignore_names);
@@ -74,6 +74,7 @@ fn run(config: &JoeConfig) -> JoeResult<()> {
     );
 
     let mut game = taki::Taki::new(&config.messages, config.bot_chat_id, &mut redis);
+    let mut chain = chain::Chain::new();
 
     telegram.poll_messages(|message| match message {
         telegram::Message { chat_id, .. } if chat_id != config.bot_chat_id => Ok(()),
@@ -90,7 +91,7 @@ fn run(config: &JoeConfig) -> JoeResult<()> {
             let reply = match game.handle_message(&msg) {
                 Response(r) => Some(r),
                 Unhandled => {
-                    if let Response(r) = chain::handle_command(&msg, &config.chain) {
+                    if let Response(r) = chain.handle_command(&msg, &config.chain) {
                         Some(r)
                     } else {
                         None
