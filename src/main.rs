@@ -34,16 +34,6 @@ fn main() {
         .unwrap_or(Vec::new());
     let chain: joebot_markov_chain::MarkovChain =
         serde_json::from_reader(File::open("chain.json").unwrap()).unwrap();
-    let chain_sources = chain
-        .sources
-        .iter()
-        .map(|s| s.names.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "))
-        .collect::<Vec<_>>()
-        .join("\n* ");
-    println!(
-        "Mashup:\n* {}\n",
-        chain_sources
-    );
 
     let messages = messages::MessageDump::from_file("messages.html", &taki_ignore_names);
     let message_authors = messages
@@ -84,7 +74,7 @@ fn run(config: &JoeConfig) -> JoeResult<()> {
     );
 
     let mut game = taki::Taki::new(&config.messages, config.bot_chat_id, &mut redis);
-    let mut chain = chain::Chain::new();
+    let mut chain = chain::Chain::new(&config.chain);
 
     telegram.poll_messages(|message| match message {
         telegram::Message { chat_id, .. } if chat_id != config.bot_chat_id => Ok(()),
@@ -101,7 +91,7 @@ fn run(config: &JoeConfig) -> JoeResult<()> {
             let reply = match game.handle_message(&msg) {
                 Response(r) => Some(r),
                 Unhandled => {
-                    if let Response(r) = chain.handle_command(&msg, &config.chain) {
+                    if let Response(r) = chain.handle_message(&msg) {
                         Some(r)
                     } else {
                         None

@@ -16,24 +16,22 @@ static DATE_RANGE_MAP: phf::Map<&'static str, (Datestamp, Datestamp)> = phf_map!
     "шестой сем" => (Datestamp { year: 2020, day: 28 }, Datestamp { year: 2020, day: 183 }),
 };
 
-pub struct Chain {
+pub struct Chain<'a> {
+    chain: &'a MarkovChain,
     rng: SmallRng,
     last_command: String,
 }
 
-impl Chain {
-    pub fn new() -> Self {
+impl<'a> Chain<'a> {
+    pub fn new(chain: &'a MarkovChain) -> Self {
         Self {
+            chain,
             rng: SmallRng::from_entropy(),
             last_command: String::new(),
         }
     }
 
-    pub fn handle_command(
-        &mut self,
-        message: &telegram::Message,
-        chain: &MarkovChain,
-    ) -> HandlerResult {
+    pub fn handle_message(&mut self, message: &telegram::Message) -> HandlerResult {
         use crate::telegram::MessageContents::*;
 
         match &message.contents {
@@ -43,10 +41,13 @@ impl Chain {
                 ..
             } if command == "mashup" => {
                 self.last_command = rest.trim().to_owned();
-                HandlerResult::Response(do_mashup(&self.last_command, chain, &mut self.rng))
+                HandlerResult::Response(do_mashup(&self.last_command, self.chain, &mut self.rng))
             }
             &Command { ref command, .. } if command == "mashupmore" => {
-                HandlerResult::Response(do_mashup(&self.last_command, chain, &mut self.rng))
+                HandlerResult::Response(do_mashup(&self.last_command, self.chain, &mut self.rng))
+            }
+            &Command { ref command, .. } if command == "mashupstars" => {
+                HandlerResult::Response(mashup_sources(&self.chain))
             }
             _ => HandlerResult::Unhandled,
         }
@@ -93,4 +94,22 @@ fn do_mashup(command: &str, chain: &MarkovChain, rng: &mut SmallRng) -> String {
         None => chain.generate(rng, &names, 20),
     }
     .unwrap_or("-".into())
+}
+
+fn mashup_sources(chain: &MarkovChain) -> String {
+    format!(
+        "* {}\n",
+        chain
+            .sources
+            .iter()
+            .map(|s| {
+                s.names
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" / ")
+            })
+            .collect::<Vec<_>>()
+            .join("\n* ")
+    )
 }
