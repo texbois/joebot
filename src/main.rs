@@ -34,6 +34,16 @@ fn main() {
         .unwrap_or(Vec::new());
     let chain: joebot_markov_chain::MarkovChain =
         serde_json::from_reader(File::open("chain.json").unwrap()).unwrap();
+    let chain_sources = chain
+        .sources
+        .iter()
+        .map(|s| s.names.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "))
+        .collect::<Vec<_>>()
+        .join("\n* ");
+    println!(
+        "Mashup:\n* {}\n",
+        chain_sources
+    );
 
     let messages = messages::MessageDump::from_file("messages.html", &taki_ignore_names);
     let message_authors = messages
@@ -43,7 +53,7 @@ fn main() {
         .collect::<Vec<_>>()
         .join(", ");
     println!(
-        "Extracted {} messages from the following authors: {}",
+        "Taki: {} messages from the following authors: {}\n",
         messages.texts.len(),
         message_authors
     );

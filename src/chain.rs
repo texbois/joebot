@@ -62,7 +62,7 @@ fn do_mashup(command: &str, chain: &MarkovChain, rng: &mut SmallRng) -> String {
             .rsplitn(2, '(')
             .collect::<Vec<_>>()[..]
         {
-            [names, date] => match DATE_RANGE_MAP.get(date.trim()) {
+            [date, names] => match DATE_RANGE_MAP.get(date.trim()) {
                 Some(range) => (names, Some(range)),
                 _ => {
                     return format!(
