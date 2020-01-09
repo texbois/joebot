@@ -18,12 +18,14 @@ static DATE_RANGE_MAP: phf::Map<&'static str, (Datestamp, Datestamp)> = phf_map!
 
 pub struct Chain {
     rng: SmallRng,
+    last_command: String,
 }
 
 impl Chain {
     pub fn new() -> Self {
         Self {
             rng: SmallRng::from_entropy(),
+            last_command: String::new(),
         }
     }
 
@@ -40,7 +42,11 @@ impl Chain {
                 ref rest,
                 ..
             } if command == "mashup" => {
-                HandlerResult::Response(do_mashup(rest.trim(), chain, &mut self.rng))
+                self.last_command = rest.trim().to_owned();
+                HandlerResult::Response(do_mashup(&self.last_command, chain, &mut self.rng))
+            }
+            &Command { ref command, .. } if command == "mashupmore" => {
+                HandlerResult::Response(do_mashup(&self.last_command, chain, &mut self.rng))
             }
             _ => HandlerResult::Unhandled,
         }
