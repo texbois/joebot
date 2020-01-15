@@ -46,8 +46,12 @@ impl<'a> Chain<'a> {
             &Command { ref command, .. } if command == "mashupmore" => {
                 HandlerResult::Response(do_mashup(&self.last_command, self.chain, &mut self.rng))
             }
-            &Command { ref command, .. } if command == "mashupstars" => {
-                HandlerResult::Response(mashup_sources(&self.chain))
+            &Command {
+                ref command,
+                ref rest,
+                ..
+            } if command == "mashupstars" => {
+                HandlerResult::Response(mashup_sources(&self.chain, rest))
             }
             _ => HandlerResult::Unhandled,
         }
@@ -98,11 +102,18 @@ fn do_mashup(command: &str, chain: &MarkovChain, rng: &mut SmallRng) -> String {
     }
 }
 
-fn mashup_sources(chain: &MarkovChain) -> String {
+fn mashup_sources(chain: &MarkovChain, filter: &str) -> String {
+    let sources = if !filter.is_empty() {
+        match pick_sources(filter, &chain.sources) {
+            Ok(sources) => sources,
+            Err(e) => return e,
+        }
+    } else {
+        chain.sources.iter().collect::<Vec<_>>()
+    };
     format!(
         "* {}\n",
-        chain
-            .sources
+        sources
             .iter()
             .map(|s| {
                 s.names
