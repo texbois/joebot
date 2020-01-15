@@ -1,5 +1,5 @@
 use crate::{telegram, HandlerResult};
-use joebot_markov_chain::{ChainGenerate, Datestamp, MarkovChain};
+use joebot_markov_chain::{ChainGenerate, Datestamp, MarkovChain, TextSource};
 use phf::phf_map;
 use rand::{rngs::SmallRng, SeedableRng};
 
@@ -88,13 +88,14 @@ fn do_mashup(command: &str, chain: &MarkovChain, rng: &mut SmallRng) -> String {
     } else {
         (command, None)
     };
-    let names = names_str.split(',').map(|n| n.trim()).collect::<Vec<_>>();
-    let sources = chain.sources.iter().filter(|s| names.iter().any(|&n| s.names.contains(n)));
-    match date_range {
-        Some(range) => chain.generate_in_date_range(rng, sources, *range, 15, 40),
-        None => chain.generate(rng, sources, 15, 40),
+    match pick_sources(names_str, &chain.sources) {
+        Ok(sources) => match date_range {
+            Some(range) => chain.generate_in_date_range(rng, sources, *range, 15, 40),
+            None => chain.generate(rng, sources, 15, 40),
+        }
+        .unwrap_or("\u{274c}".into()),
+        Err(err) => err,
     }
-    .unwrap_or("\u{274c}".into())
 }
 
 fn mashup_sources(chain: &MarkovChain) -> String {
@@ -113,4 +114,39 @@ fn mashup_sources(chain: &MarkovChain) -> String {
             .collect::<Vec<_>>()
             .join("\n* ")
     )
+}
+
+fn pick_sources<'s>(
+    names_str: &str,
+    sources: &'s Vec<TextSource>,
+) -> Result<Vec<&'s TextSource>, String> {
+    use alcs::FuzzyStrstr;
+
+    names_str
+        .to_lowercase()
+        .split(',')
+        .map(str::trim)
+        .try_fold(Vec::new(), |mut acc, name| {
+            let source = sources
+                .iter()
+                .flat_map(|source| {
+                    source.names.iter().map(move |source_name| {
+                        source_name
+                            .to_lowercase()
+                            .fuzzy_find_str(name, 0.5)
+                            .map(|(score, _)| (score, source))
+                    })
+                })
+                .flatten()
+                .max_by(|(score1, _), (score2, _)| score1.partial_cmp(score2).unwrap());
+            source
+                .ok_or(format!(
+                    "\u{274c} {}? Такого я здесь не встречал, приятель.",
+                    name
+                ))
+                .map(|(_, source)| {
+                    acc.push(source);
+                    acc
+                })
+        })
 }
