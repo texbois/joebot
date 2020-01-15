@@ -57,7 +57,7 @@ impl<'a> Chain<'a> {
 fn do_mashup(command: &str, chain: &MarkovChain, rng: &mut SmallRng) -> String {
     if command.is_empty() {
         return [
-            "Примеры:\n",
+            "\u{2753} Примеры:\n",
             "/mashup joe, ma\n",
             "/mashup joe, овт (первый курс)\n",
             "/mashup joe, ma, осп (пятый сем)",
@@ -73,7 +73,7 @@ fn do_mashup(command: &str, chain: &MarkovChain, rng: &mut SmallRng) -> String {
                 Some(range) => (names, Some(range)),
                 _ => {
                     return format!(
-                        "{}? Давно это было. Я помню только {}.",
+                        "\u{274c} {}? Давно это было. Я помню только {}.",
                         date,
                         DATE_RANGE_MAP
                             .keys()
@@ -94,7 +94,7 @@ fn do_mashup(command: &str, chain: &MarkovChain, rng: &mut SmallRng) -> String {
         Some(range) => chain.generate_in_date_range(rng, sources, *range, 15, 40),
         None => chain.generate(rng, sources, 15, 40),
     }
-    .unwrap_or("-".into())
+    .unwrap_or("\u{274c}".into())
 }
 
 fn mashup_sources(chain: &MarkovChain) -> String {
