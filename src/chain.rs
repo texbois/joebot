@@ -89,9 +89,10 @@ fn do_mashup(command: &str, chain: &MarkovChain, rng: &mut SmallRng) -> String {
         (command, None)
     };
     let names = names_str.split(',').map(|n| n.trim()).collect::<Vec<_>>();
+    let sources = chain.sources.iter().filter(|s| names.iter().any(|&n| s.names.contains(n)));
     match date_range {
-        Some(range) => chain.generate_in_date_range(rng, &names, *range, 20),
-        None => chain.generate(rng, &names, 20),
+        Some(range) => chain.generate_in_date_range(rng, sources, *range, 15, 40),
+        None => chain.generate(rng, sources, 15, 40),
     }
     .unwrap_or("-".into())
 }

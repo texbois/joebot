@@ -1,4 +1,3 @@
-use serde_json;
 use std::error::Error;
 use std::fs::File;
 
@@ -33,7 +32,7 @@ fn main() {
         .map(|v| v.split(",").map(|n| n.to_owned()).collect())
         .unwrap_or(Vec::new());
     let chain: joebot_markov_chain::MarkovChain =
-        serde_json::from_reader(File::open("chain.json").unwrap()).unwrap();
+        bincode::deserialize_from(File::open("chain.bin").unwrap()).unwrap();
 
     let messages = messages::MessageDump::from_file("messages.html", &taki_ignore_names);
     let message_authors = messages

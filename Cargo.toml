@@ -9,10 +9,11 @@ joebot-markov-chain = { git = "https://github.com/texbois/joebot-markov-chain" }
 vkopt-message-parser = { git = "https://github.com/texbois/vkopt-message-parser" }
 rand = { version = "0.7", features = ["small_rng"] }
 reqwest = { version = "0.10", features = ["blocking", "json"] }
+redis = "0.13"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
-redis = "0.13"
+bincode = "1.2"
 phf = { version = "0.8", features = ["macros"] }
 
 [profile.release]
