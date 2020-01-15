@@ -144,8 +144,8 @@ fn pick_sources<'s>(
                     source.names.iter().map(move |source_name| {
                         source_name
                             .to_lowercase()
-                            .fuzzy_find_str(name, 0.5)
-                            .map(|(score, _)| (score, source))
+                            .fuzzy_find_pos(name, 0.5)
+                            .map(|(score, _, _)| (score, source))
                     })
                 })
                 .flatten()
