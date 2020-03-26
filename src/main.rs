@@ -28,13 +28,13 @@ fn main() {
         .ok()
         .and_then(|id| id.parse().ok())
         .expect("Provide the bot's chatroom id via the CHAT_ID environment variable");
-    let taki_ignore_names: Vec<String> = std::env::var("TAKI_IGNORE_NAMES")
-        .map(|v| v.split(",").map(|n| n.to_owned()).collect())
+    let taki_names: Vec<String> = std::env::var("TAKI_NAMES")
+        .map(|v| v.split(",").map(|n| n.trim().to_owned()).collect())
         .unwrap_or(Vec::new());
     let chain: joebot_markov_chain::MarkovChain =
         bincode::deserialize_from(File::open("chain.bin").unwrap()).unwrap();
 
-    let messages = messages::MessageDump::from_file("messages.html", &taki_ignore_names);
+    let messages = messages::MessageDump::from_file("messages.html", &taki_names);
     let message_authors = messages
         .authors
         .iter()

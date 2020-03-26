@@ -19,7 +19,7 @@ pub struct MessageDump {
 }
 
 impl MessageDump {
-    pub fn from_file<S: AsRef<str>>(input_file: &str, ignore_names: &[S]) -> Self {
+    pub fn from_file<S: AsRef<str>>(input_file: &str, names: &[S]) -> Self {
         let mut authors: Vec<Author> = Vec::new();
         let texts = fold_html(
             input_file,
@@ -39,7 +39,7 @@ impl MessageDump {
                     }
                 },
                 MessageEvent::FullNameExtracted(full_name)
-                    if ignore_names.iter().any(|n| n.as_ref() == full_name) =>
+                    if !names.iter().any(|n| n.as_ref() == full_name) =>
                 {
                     EventResult::SkipMessage(msgs)
                 }

@@ -10,10 +10,9 @@ to export any VKontakte chat you'd like to use for the _Taki_ game
 (be sure to select the _Export as .html_ option)
 2. Save the chat history file as `messages.html` and place it in the crate root
 3. Build the bot by running `cargo build --release`
+4. Specify participants in the `TAKI_NAMES` environment variable and run the bot
 
-You can ignore messages from a particular user (e.g. a bot) by putting their screen name
-in the `TAKI_IGNORE_NAMES` environment variable when running the build. You can enter
-multiple names, too, just separate them with commas. Example command:
+Example command:
 ```
-TAKI_IGNORE_NAMES="id1,id2,custom_name" cargo build --release
+TAKI_NAMES="Ivan Ivanoff, Pavel Pavlov, Alexey Alexeev" cargo run --release
 ```
