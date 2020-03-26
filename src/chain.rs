@@ -35,7 +35,7 @@ impl<'a> Chain<'a> {
         use crate::telegram::MessageContents::*;
 
         match &message.contents {
-            &Command {
+            Command {
                 ref command,
                 ref rest,
                 ..
@@ -43,10 +43,10 @@ impl<'a> Chain<'a> {
                 self.last_command = rest.trim().to_owned();
                 HandlerResult::Response(do_mashup(&self.last_command, self.chain, &mut self.rng))
             }
-            &Command { ref command, .. } if command == "mashupmore" => {
+            Command { ref command, .. } if command == "mashupmore" => {
                 HandlerResult::Response(do_mashup(&self.last_command, self.chain, &mut self.rng))
             }
-            &Command {
+            Command {
                 ref command,
                 ref rest,
                 ..
@@ -63,12 +63,12 @@ fn do_mashup(command: &str, chain: &MarkovChain, rng: &mut SmallRng) -> String {
         return [
             "\u{2753} Примеры:\n",
             "/mashup joe, ma\n",
-            "/mashup joe, етестер (пятый сем)",
-            "/mashup joe, ma, овт (первый курс)\n",
+            "/mashup joe, етестер (пятый сем)\n",
+            "/mashup joe, ma, овт (первый курс)",
         ]
         .concat();
     }
-    let (names_str, date_range) = if command.chars().last() == Some(')') {
+    let (names_str, date_range) = if command.ends_with(')') {
         match command[..command.len() - 1]
             .rsplitn(2, '(')
             .collect::<Vec<_>>()[..]
@@ -81,7 +81,7 @@ fn do_mashup(command: &str, chain: &MarkovChain, rng: &mut SmallRng) -> String {
                         date,
                         DATE_RANGE_MAP
                             .keys()
-                            .cloned()
+                            .copied()
                             .collect::<Vec<_>>()
                             .join(", ")
                     )
@@ -97,7 +97,7 @@ fn do_mashup(command: &str, chain: &MarkovChain, rng: &mut SmallRng) -> String {
             Some(range) => chain.generate_in_date_range(rng, sources, *range, 15, 40),
             None => chain.generate(rng, sources, 15, 40),
         }
-        .unwrap_or("\u{274c}".into()),
+        .unwrap_or_else(|| String::from("\u{274c}")),
         Err(err) => err,
     }
 }
@@ -129,7 +129,7 @@ fn mashup_sources(chain: &MarkovChain, filter: &str) -> String {
 
 fn pick_sources<'s>(
     names_str: &str,
-    sources: &'s Vec<TextSource>,
+    sources: &'s[TextSource],
 ) -> Result<Vec<&'s TextSource>, String> {
     use alcs::FuzzyStrstr;
 

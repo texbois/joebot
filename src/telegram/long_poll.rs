@@ -77,12 +77,12 @@ fn parse_text_message(mut update_obj: serde_json::Value) -> Option<Message> {
         .and_then(|e| {
             let cmd_len = e["length"].as_u64().unwrap() as usize;
 
-            match &text[1 /* skip forward slash */..cmd_len]
+            match text[1 /* skip forward slash */..cmd_len]
                 .split('@')
                 .collect::<Vec<_>>()[..]
             {
-                &[cmd] => Some((cmd.to_owned(), None, text[cmd_len..].to_owned())),
-                &[cmd, receiver] => Some((
+                [cmd] => Some((cmd.to_owned(), None, text[cmd_len..].to_owned())),
+                [cmd, receiver] => Some((
                     cmd.to_owned(),
                     Some(receiver.to_owned()),
                     text[cmd_len..].to_owned(),

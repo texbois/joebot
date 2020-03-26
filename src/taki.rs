@@ -7,7 +7,7 @@ use crate::HandlerResult;
 
 const INIT_SCORE: i32 = 5;
 const MESSAGES_SHOWN: usize = 3;
-const START_MESSAGES: [(&'static str, &'static str); 3] = [
+const START_MESSAGES: [(&str, &str); 3] = [
     ("Один мудрец сказал:", "Кто же это был?"),
     (
         "Последний раз подозреваемого видели в местном баре, где он произнес:",
@@ -15,12 +15,12 @@ const START_MESSAGES: [(&'static str, &'static str); 3] = [
     ),
     ("Дружок-пирожок оставил вам послание:", "Узнали?"),
 ];
-const WIN_MESSAGES: [&'static str; 3] = [
+const WIN_MESSAGES: [&str; 3] = [
     "Хорошая работа, дружище.",
     "А ты неплох, приятель.",
     "Дело сделано, джентельмены.",
 ];
-const LOSE_MESSAGES: [&'static str; 4] = [
+const LOSE_MESSAGES: [&str; 4] = [
     "Казино не взломано.",
     "Игра закрыта, неудачники.",
     "Очень жаль, но вы проиграли.",
