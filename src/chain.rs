@@ -63,8 +63,8 @@ fn do_mashup(command: &str, chain: &MarkovChain, rng: &mut SmallRng) -> String {
         return [
             "\u{2753} Примеры:\n",
             "/mashup joe, ma\n",
-            "/mashup joe, овт (первый курс)\n",
-            "/mashup joe, ma, осп (пятый сем)",
+            "/mashup joe, етестер (пятый сем)",
+            "/mashup joe, ma, овт (первый курс)\n",
         ]
         .concat();
     }
@@ -142,10 +142,14 @@ fn pick_sources<'s>(
                 .iter()
                 .flat_map(|source| {
                     source.names.iter().map(move |source_name| {
-                        source_name
-                            .to_lowercase()
-                            .fuzzy_find_pos(name, 0.5)
-                            .map(|(score, _, _)| (score, source))
+                        let source_name_lower = source_name.to_lowercase();
+                        if name == source_name_lower {
+                            Some((1.0, source))
+                        } else {
+                            source_name_lower
+                                .fuzzy_find_pos(name, 0.5)
+                                .map(|(score, _, _)| (score, source))
+                        }
                     })
                 })
                 .flatten()
