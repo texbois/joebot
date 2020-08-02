@@ -17,6 +17,7 @@ bincode = "1.2"
 phf = { version = "0.8", features = ["macros"] }
 alcs = "0.1"
 artano = "0.3"
+regex = "1"
 
 [dependencies.serenity]
 version = "0.8"

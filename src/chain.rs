@@ -1,4 +1,4 @@
-use crate::JoeResult;
+use crate::{JoeResult, utils::split_command_rest};
 use joebot_markov_chain::{ChainGenerate, Datestamp, MarkovChain, TextSource};
 use phf::phf_map;
 use rand::{rngs::SmallRng, SeedableRng};
@@ -33,10 +33,7 @@ impl Chain {
     }
 
     pub fn handle_message(&mut self, ctx: &Context, msg: &Message) -> JoeResult<bool> {
-        let [command, rest] = match msg.content.splitn(2, ' ').collect::<Vec<&str>>()[..] {
-            [c, r] => [c, r],
-            _ => [&msg.content, ""],
-        };
+        let (command, rest) = split_command_rest(msg);
         let resp = match command {
             "!mashup" => {
                 self.last_command = rest.trim().to_owned();

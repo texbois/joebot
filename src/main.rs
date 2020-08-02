@@ -12,6 +12,7 @@ use serenity::{model::prelude::*, prelude::*};
 mod chain;
 mod joker;
 mod taki;
+mod utils;
 
 struct MessageHandlers {
     taki: taki::Taki,
