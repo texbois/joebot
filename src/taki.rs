@@ -1,9 +1,11 @@
+use serenity::{model::prelude::*, prelude::*};
+use std::fmt::Write;
+
 use crate::{
     messages::{self, MessageDump},
-    storage, telegram,
+    storage, JoeResult,
 };
 use rand::{rngs::SmallRng, seq::SliceRandom, SeedableRng};
-use crate::HandlerResult;
 
 const INIT_SCORE: i32 = 5;
 const MESSAGES_SHOWN: usize = 3;
@@ -27,20 +29,22 @@ const LOSE_MESSAGES: [&str; 4] = [
     "Удачи в другой раз, амигос.",
 ];
 
-pub struct Taki<'a> {
-    messages: &'a MessageDump,
-    storage: storage::ChatGameStorage<'a>,
-    ongoing: Option<OngoingGame<'a>>,
+use std::sync::Arc;
+
+pub struct Taki {
+    messages: Arc<MessageDump>,
+    storage: storage::ChatGameStorage,
+    ongoing: Option<OngoingGame>,
     rng: SmallRng,
 }
 
-struct OngoingGame<'a> {
-    suspect: &'a messages::Author,
+struct OngoingGame {
+    suspect: messages::Author,
     score: i32,
 }
 
-impl<'a> Taki<'a> {
-    pub fn new(messages: &'a MessageDump, chat_id: i64, redis: &'a mut storage::Redis) -> Self {
+impl Taki {
+    pub fn new(messages: Arc<MessageDump>, chat_id: u64, redis: &storage::Redis) -> Self {
         Self {
             messages,
             storage: redis.get_game_storage("taki", chat_id),
@@ -49,60 +53,66 @@ impl<'a> Taki<'a> {
         }
     }
 
-    pub fn handle_message(&mut self, message: &telegram::Message) -> HandlerResult {
-        use crate::telegram::MessageContents::*;
-
-        match (&message.contents, &mut self.ongoing) {
-            (&Command { ref command, .. }, None) if command == "takistart" => {
-                let (suspect, messages) = pick_random_suspect(self.messages, &mut self.rng);
+    pub fn handle_message(&mut self, ctx: &Context, msg: &Message) -> JoeResult<bool> {
+        match (msg.content.as_str(), &mut self.ongoing) {
+            ("!takistart", None) => {
+                let (suspect, messages) = pick_random_suspect(&self.messages, &mut self.rng);
 
                 self.ongoing = Some(OngoingGame {
-                    suspect,
+                    suspect: suspect.clone(),
                     score: INIT_SCORE,
                 });
                 let (start_prefix, start_suffix) = START_MESSAGES.choose(&mut self.rng).unwrap();
 
-                HandlerResult::Response(format!(
+                let resp = format!(
                     "{}\n\n* {}\n\n{}",
                     start_prefix,
                     messages.join("\n* "),
                     start_suffix
-                ))
-            }
-            (&Command { ref command, .. }, _) if command == "takistats" => {
-                let stats = self
-                    .storage
-                    .fetch_sorted_set("scores")
-                    .unwrap()
-                    .into_iter()
-                    .enumerate()
-                    .map(|(index, (name, score))| format!("{}) {} -- {}", index + 1, name, score))
-                    .collect::<Vec<_>>()
-                    .join("\n");
+                );
 
-                HandlerResult::Response(format!("Статы:\n{}", stats))
+                msg.channel_id.say(&ctx.http, resp)?;
+                Ok(true)
             }
-            (&Command { ref command, .. }, _) if command == "takisuspects" => {
-                let suspects = list_suspects(self.messages).join("\n");
-                HandlerResult::Response(format!("Подозреваемые:\n{}", suspects))
-            }
-            (&Text(ref text), Some(ref mut game)) => {
-                let text_lower = text.to_lowercase();
+            ("!takistats", _) => {
+                let mut stats = String::new();
 
-                if text_lower == game.suspect.short_name || text_lower == game.suspect.full_name {
+                let scores = self.storage.fetch_sorted_set("scores")?;
+
+                for (index, (uid, score)) in scores.into_iter().enumerate() {
+                    let user = UserId(uid).to_user(ctx)?;
+                    write!(&mut stats, "{}) {} -- {}\n", index + 1, user.name, score)?;
+                }
+
+                msg.channel_id
+                    .say(&ctx.http, format!("Статы:\n{}", stats))?;
+                Ok(true)
+            }
+            ("!takisuspects", _) => {
+                let suspects = list_suspects(&self.messages).join("\n");
+                let resp = format!("Подозреваемые:\n{}", suspects);
+
+                msg.channel_id.say(&ctx.http, resp)?;
+                Ok(true)
+            }
+            (_, Some(ref mut game)) => {
+                let text_lower = msg.content.to_lowercase();
+
+                if text_lower == game.suspect.short_name.to_lowercase()
+                    || text_lower == game.suspect.full_name.to_lowercase()
+                {
                     let reply = format!(
                         "{}\n{} +{}",
                         WIN_MESSAGES.choose(&mut self.rng).unwrap(),
-                        message.sender,
+                        msg.author.name,
                         game.score
                     );
 
                     self.storage
-                        .incr_in_set("scores", &message.sender, game.score)
-                        .unwrap();
+                        .incr_in_set("scores", msg.author.id.0, game.score)?;
                     self.ongoing = None;
 
-                    HandlerResult::Response(reply)
+                    msg.channel_id.say(&ctx.http, reply)?;
                 } else {
                     game.score -= 1;
 
@@ -116,13 +126,12 @@ impl<'a> Taki<'a> {
 
                         self.ongoing = None;
 
-                        HandlerResult::Response(reply)
-                    } else {
-                        HandlerResult::NoResponse
+                        msg.channel_id.say(&ctx.http, reply)?;
                     }
                 }
+                Ok(true)
             }
-            _ => HandlerResult::Unhandled,
+            _ => Ok(false),
         }
     }
 }

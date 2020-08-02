@@ -3,6 +3,10 @@
 _Taki_ ([Polish](https://en.wiktionary.org/wiki/taki#Polish) for _such_) is a guessing game
 for chatrooms where people think they know each other well :^)
 
+## Legacy versions
+
+* [Telegram](https://github.com/texbois/joebot/tree/telegram/) (pretty lightweight thanks to a handwritten API client)
+
 ## Getting up & running
 
 1. Use [VkOpt](https://chrome.google.com/webstore/detail/vkopt/hoboppgpbgclpfnjfdidokiilachfcbb)

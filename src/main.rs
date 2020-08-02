@@ -1,39 +1,91 @@
 use std::error::Error;
 use std::fs::File;
+use std::sync::Arc;
 
 pub type JoeResult<T> = Result<T, Box<dyn Error>>;
-pub enum HandlerResult {
-    Unhandled,
-    NoResponse,
-    Response(String),
-}
 
-mod chain;
 mod messages;
 mod storage;
-mod taki;
-mod telegram;
 
-struct JoeConfig {
-    bot_token: String,
-    bot_chat_id: i64,
-    messages: messages::MessageDump,
-    chain: joebot_markov_chain::MarkovChain,
+use serenity::{model::prelude::*, prelude::*};
+
+mod chain;
+mod taki;
+
+struct Handler {
+    bot_channel_id: ChannelId,
+    taki: Mutex<taki::Taki>,
+    chain: Mutex<chain::Chain>,
+}
+
+impl Handler {
+    fn handle_message(&self, ctx: Context, msg: Message) -> JoeResult<()> {
+        let taki_result = self.taki.lock().handle_message(&ctx, &msg);
+        if taki_result.map_err(|e| format!("Taki: {:?}", e))? {
+            return Ok(());
+        }
+        let chain_result = self.chain.lock().handle_message(&ctx, &msg);
+        if chain_result.map_err(|e| format!("Chain: {:?}", e))? {
+            return Ok(());
+        }
+        if msg.content == "!ping" {
+            msg.channel_id
+                .say(&ctx.http, "Pong!")
+                .map_err(|e| format!("Ping: {:?}", e))?;
+        }
+        Ok(())
+    }
+}
+
+impl EventHandler for Handler {
+    fn ready(&self, _: Context, ready: Ready) {
+        println!("Connected as {}", ready.user.name);
+    }
+
+    fn message(&self, ctx: Context, msg: Message) {
+        if msg.channel_id != self.bot_channel_id {
+            return;
+        }
+        if let Err(e) = self.handle_message(ctx, msg) {
+            eprintln!("{}", e)
+        }
+    }
 }
 
 fn main() {
     let bot_token = std::env::var("BOT_TOKEN")
         .expect("Provide a valid bot token via the BOT_TOKEN environment variable");
-    let bot_chat_id: i64 = std::env::var("CHAT_ID")
+    let bot_channel_id: u64 = std::env::var("BOT_CHANNEL_ID")
         .ok()
         .and_then(|id| id.parse().ok())
-        .expect("Provide the bot's chatroom id via the CHAT_ID environment variable");
+        .expect("Provide the bot's channel id via the BOT_CHANNEL_ID environment variable");
+    let redis = storage::Redis::new("redis://127.0.0.1/")
+        .map_err(|e| format!("redis: {}", e))
+        .unwrap();
+
+    let taki = Mutex::new(init_taki(bot_channel_id, &redis));
+    let chain = Mutex::new(init_chain());
+
+    let handler = Handler {
+        bot_channel_id: ChannelId(bot_channel_id),
+        taki,
+        chain,
+    };
+    let mut client = Client::new(&bot_token, handler).unwrap();
+
+    if let Err(e) = client.start() {
+        eprintln!("Client error: {:?}", e);
+    }
+}
+
+fn init_taki(channel_id: u64, redis: &storage::Redis) -> taki::Taki {
     let taki_names_env = std::env::var("TAKI_NAMES").unwrap_or_default();
     let taki_names: Vec<&str> = taki_names_env.split(',').map(|n| n.trim()).collect();
-    let chain: joebot_markov_chain::MarkovChain =
-        bincode::deserialize_from(File::open("chain.bin").unwrap()).unwrap();
 
-    let messages = messages::MessageDump::from_file("messages.html", &taki_names);
+    let messages = Arc::new(messages::MessageDump::from_file(
+        "messages.html",
+        &taki_names,
+    ));
     let message_authors = messages
         .authors
         .iter()
@@ -45,62 +97,12 @@ fn main() {
         messages.texts.len(),
         message_authors
     );
-
-    let config = JoeConfig {
-        bot_token,
-        bot_chat_id,
-        messages,
-        chain,
-    };
-
-    match run(&config) {
-        Ok(_) => println!("Good night, sweet prince."),
-        Err(e) => eprintln!("Error: {}", e),
-    }
+    taki::Taki::new(messages, channel_id, redis)
 }
 
-fn run(config: &JoeConfig) -> JoeResult<()> {
-    let mut redis =
-        storage::Redis::new("redis://127.0.0.1/").map_err(|e| format!("redis: {}", e))?;
+fn init_chain() -> chain::Chain {
+    let data: joebot_markov_chain::MarkovChain =
+        bincode::deserialize_from(File::open("chain.bin").unwrap()).unwrap();
 
-    let telegram = telegram::Telegram::new(&config.bot_token);
-    let bot_name = telegram.get_bot_username()?;
-
-    println!(
-        "@{} is ready. Polling for incoming messages from chat #{}",
-        bot_name, config.bot_chat_id
-    );
-
-    let mut game = taki::Taki::new(&config.messages, config.bot_chat_id, &mut redis);
-    let mut chain = chain::Chain::new(&config.chain);
-
-    telegram.poll_messages(|message| match message {
-        telegram::Message { chat_id, .. } if chat_id != config.bot_chat_id => Ok(()),
-        telegram::Message {
-            contents:
-                telegram::MessageContents::Command {
-                    receiver: Some(ref receiver_name),
-                    ..
-                },
-            ..
-        } if receiver_name != &bot_name => Ok(()),
-        msg => {
-            use HandlerResult::*;
-            let reply = match game.handle_message(&msg) {
-                Response(r) => Some(r),
-                Unhandled => {
-                    if let Response(r) = chain.handle_message(&msg) {
-                        Some(r)
-                    } else {
-                        None
-                    }
-                }
-                _ => None,
-            };
-            if let Some(r) = reply {
-                telegram.send_message(config.bot_chat_id, &r)?;
-            }
-            Ok(())
-        }
-    })
+    chain::Chain::new(data)
 }

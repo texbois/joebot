@@ -1,7 +1,8 @@
-use crate::{telegram, HandlerResult};
+use crate::JoeResult;
 use joebot_markov_chain::{ChainGenerate, Datestamp, MarkovChain, TextSource};
 use phf::phf_map;
 use rand::{rngs::SmallRng, SeedableRng};
+use serenity::{model::prelude::*, prelude::*};
 
 static DATE_RANGE_MAP: phf::Map<&'static str, (Datestamp, Datestamp)> = phf_map! {
     "первый курс" => (Datestamp { year: 2017, day: 182 }, Datestamp { year: 2018, day: 182 }),
@@ -16,14 +17,14 @@ static DATE_RANGE_MAP: phf::Map<&'static str, (Datestamp, Datestamp)> = phf_map!
     "шестой сем" => (Datestamp { year: 2020, day: 28 }, Datestamp { year: 2020, day: 183 }),
 };
 
-pub struct Chain<'a> {
-    chain: &'a MarkovChain,
+pub struct Chain {
+    chain: joebot_markov_chain::MarkovChain,
     rng: SmallRng,
     last_command: String,
 }
 
-impl<'a> Chain<'a> {
-    pub fn new(chain: &'a MarkovChain) -> Self {
+impl Chain {
+    pub fn new(chain: MarkovChain) -> Self {
         Self {
             chain,
             rng: SmallRng::from_entropy(),
@@ -31,29 +32,25 @@ impl<'a> Chain<'a> {
         }
     }
 
-    pub fn handle_message(&mut self, message: &telegram::Message) -> HandlerResult {
-        use crate::telegram::MessageContents::*;
-
-        match &message.contents {
-            Command {
-                ref command,
-                ref rest,
-                ..
-            } if command == "mashup" => {
+    pub fn handle_message(&mut self, ctx: &Context, msg: &Message) -> JoeResult<bool> {
+        let [command, rest] = match msg.content.splitn(2, ' ').collect::<Vec<&str>>()[..] {
+            [c, r] => [c, r],
+            _ => [&msg.content, ""],
+        };
+        let resp = match command {
+            "!mashup" => {
                 self.last_command = rest.trim().to_owned();
-                HandlerResult::Response(do_mashup(&self.last_command, self.chain, &mut self.rng))
+                Some(do_mashup(&self.last_command, &self.chain, &mut self.rng))
             }
-            Command { ref command, .. } if command == "mashupmore" => {
-                HandlerResult::Response(do_mashup(&self.last_command, self.chain, &mut self.rng))
-            }
-            Command {
-                ref command,
-                ref rest,
-                ..
-            } if command == "mashupstars" => {
-                HandlerResult::Response(mashup_sources(&self.chain, rest))
-            }
-            _ => HandlerResult::Unhandled,
+            "!mashupmore" => Some(do_mashup(&self.last_command, &self.chain, &mut self.rng)),
+            "!mashupstars" => Some(mashup_sources(&self.chain, rest)),
+            _ => None,
+        };
+        if let Some(r) = resp {
+            msg.channel_id.say(&ctx.http, r)?;
+            Ok(true)
+        } else {
+            Ok(false)
         }
     }
 }
@@ -62,9 +59,9 @@ fn do_mashup(command: &str, chain: &MarkovChain, rng: &mut SmallRng) -> String {
     if command.is_empty() {
         return [
             "\u{2753} Примеры:\n",
-            "/mashup joe, ma\n",
-            "/mashup joe, етестер (пятый сем)\n",
-            "/mashup joe, ma, овт (первый курс)",
+            "!mashup joe, ma\n",
+            "!mashup joe, етестер (пятый сем)\n",
+            "!mashup joe, ma, овт (первый курс)",
         ]
         .concat();
     }
