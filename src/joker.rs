@@ -9,7 +9,7 @@ use std::sync::Arc;
 pub struct Joker {
     messages: Arc<MessageDump>,
     font: Font<'static>,
-    mention_regex: Regex,
+    trigger_regex: Regex,
     rng: SmallRng,
     source_images: Vec<Vec<u8>>,
 }
@@ -17,7 +17,7 @@ pub struct Joker {
 impl Joker {
     pub fn new(messages: Arc<MessageDump>) -> JoeResult<Self> {
         let font = Font::try_from_vec(std::fs::read("joker/font.ttf")?).unwrap();
-        let mention_regex = Regex::new("(?i)(?:джокер)[а-я ]*([+]+)?").unwrap();
+        let trigger_regex = Regex::new("(?i)(?:джокер)[а-я ]*([+]+)?").unwrap();
         let rng = SmallRng::from_entropy();
 
         let mut source_images = Vec::new();
@@ -31,14 +31,14 @@ impl Joker {
         Ok(Self {
             messages,
             font,
-            mention_regex,
+            trigger_regex,
             rng,
             source_images,
         })
     }
 
     pub fn handle_message(&mut self, ctx: &Context, msg: &Message) -> JoeResult<bool> {
-        if let Some(captures) = self.mention_regex.captures(&msg.content) {
+        if let Some(captures) = self.trigger_regex.captures(&msg.content) {
             let min_words = captures
                 .get(1)
                 .map(|pluses| pluses.as_str().len())

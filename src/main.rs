@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::error::Error;
 use std::fs::File;
 use std::sync::Arc;
@@ -6,27 +7,36 @@ pub type JoeResult<T> = Result<T, Box<dyn Error>>;
 
 mod messages;
 mod storage;
+mod utils;
 
 use serenity::{model::prelude::*, prelude::*};
 
 mod chain;
 mod joker;
 mod taki;
-mod utils;
+mod wdyt;
 
 struct MessageHandlers {
     taki: taki::Taki,
     chain: chain::Chain,
     joker: joker::Joker,
+    wdyt: wdyt::Wdyt,
 }
 
 struct Handler {
+    bot_user: Mutex<RefCell<Option<CurrentUser>>>,
     bot_channel_id: ChannelId,
     message_handlers: Mutex<MessageHandlers>,
 }
 
 impl Handler {
     fn handle_message(&self, ctx: Context, msg: Message) -> JoeResult<()> {
+        if let Some(ref user) = *self.bot_user.lock().borrow() {
+            if user.id == msg.author.id {
+                return Ok(());
+            }
+        }
+
         let mut handlers = self.message_handlers.lock();
         let taki_result = handlers.taki.handle_message(&ctx, &msg);
         if taki_result.map_err(|e| format!("Taki: {:?}", e))? {
@@ -40,6 +50,11 @@ impl Handler {
         if joker_result.map_err(|e| format!("Joker: {:?}", e))? {
             return Ok(());
         }
+        let wdyt_result = handlers.wdyt.handle_message(&ctx, &msg);
+        if wdyt_result.map_err(|e| format!("Wdyt: {:?}", e))? {
+            return Ok(());
+        }
+
         if msg.content == "!ping" {
             msg.channel_id
                 .say(&ctx.http, "Pong!")
@@ -52,6 +67,7 @@ impl Handler {
 impl EventHandler for Handler {
     fn ready(&self, _: Context, ready: Ready) {
         println!("Connected as {}", ready.user.name);
+        self.bot_user.lock().replace(Some(ready.user));
     }
 
     fn message(&self, ctx: Context, msg: Message) {
@@ -77,6 +93,7 @@ fn main() {
 
     let message_handlers = Mutex::new(init_handlers(bot_channel_id, &redis));
     let handler = Handler {
+        bot_user: Mutex::new(RefCell::new(None)),
         bot_channel_id: ChannelId(bot_channel_id),
         message_handlers,
     };
@@ -95,8 +112,14 @@ fn init_handlers(channel_id: u64, redis: &storage::Redis) -> MessageHandlers {
     let taki = taki::Taki::new(messages.clone(), channel_id, redis);
     let chain = chain::Chain::new(chain_data);
     let joker = joker::Joker::new(messages.clone()).unwrap();
+    let wdyt = wdyt::Wdyt::new(messages.clone()).unwrap();
 
-    MessageHandlers { taki, chain, joker }
+    MessageHandlers {
+        taki,
+        chain,
+        joker,
+        wdyt,
+    }
 }
 
 fn init_messages() -> Arc<messages::MessageDump> {
