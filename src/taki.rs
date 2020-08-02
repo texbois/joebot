@@ -1,11 +1,11 @@
-use serenity::{model::prelude::*, prelude::*};
-use std::fmt::Write;
-
 use crate::{
     messages::{self, MessageDump},
     storage, JoeResult,
 };
 use rand::{rngs::SmallRng, seq::SliceRandom, SeedableRng};
+use serenity::{model::prelude::*, prelude::*};
+use std::fmt::Write;
+use std::sync::Arc;
 
 const INIT_SCORE: i32 = 5;
 const MESSAGES_SHOWN: usize = 3;
@@ -28,8 +28,6 @@ const LOSE_MESSAGES: [&str; 4] = [
     "Очень жаль, но вы проиграли.",
     "Удачи в другой раз, амигос.",
 ];
-
-use std::sync::Arc;
 
 pub struct Taki {
     messages: Arc<MessageDump>,

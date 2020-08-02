@@ -10,22 +10,33 @@ mod storage;
 use serenity::{model::prelude::*, prelude::*};
 
 mod chain;
+mod joker;
 mod taki;
+
+struct MessageHandlers {
+    taki: taki::Taki,
+    chain: chain::Chain,
+    joker: joker::Joker,
+}
 
 struct Handler {
     bot_channel_id: ChannelId,
-    taki: Mutex<taki::Taki>,
-    chain: Mutex<chain::Chain>,
+    message_handlers: Mutex<MessageHandlers>,
 }
 
 impl Handler {
     fn handle_message(&self, ctx: Context, msg: Message) -> JoeResult<()> {
-        let taki_result = self.taki.lock().handle_message(&ctx, &msg);
+        let mut handlers = self.message_handlers.lock();
+        let taki_result = handlers.taki.handle_message(&ctx, &msg);
         if taki_result.map_err(|e| format!("Taki: {:?}", e))? {
             return Ok(());
         }
-        let chain_result = self.chain.lock().handle_message(&ctx, &msg);
+        let chain_result = handlers.chain.handle_message(&ctx, &msg);
         if chain_result.map_err(|e| format!("Chain: {:?}", e))? {
+            return Ok(());
+        }
+        let joker_result = handlers.joker.handle_message(&ctx, &msg);
+        if joker_result.map_err(|e| format!("Joker: {:?}", e))? {
             return Ok(());
         }
         if msg.content == "!ping" {
@@ -63,13 +74,10 @@ fn main() {
         .map_err(|e| format!("redis: {}", e))
         .unwrap();
 
-    let taki = Mutex::new(init_taki(bot_channel_id, &redis));
-    let chain = Mutex::new(init_chain());
-
+    let message_handlers = Mutex::new(init_handlers(bot_channel_id, &redis));
     let handler = Handler {
         bot_channel_id: ChannelId(bot_channel_id),
-        taki,
-        chain,
+        message_handlers,
     };
     let mut client = Client::new(&bot_token, handler).unwrap();
 
@@ -78,14 +86,23 @@ fn main() {
     }
 }
 
-fn init_taki(channel_id: u64, redis: &storage::Redis) -> taki::Taki {
-    let taki_names_env = std::env::var("TAKI_NAMES").unwrap_or_default();
-    let taki_names: Vec<&str> = taki_names_env.split(',').map(|n| n.trim()).collect();
+fn init_handlers(channel_id: u64, redis: &storage::Redis) -> MessageHandlers {
+    let messages = init_messages();
+    let chain_data: joebot_markov_chain::MarkovChain =
+        bincode::deserialize_from(File::open("chain.bin").unwrap()).unwrap();
 
-    let messages = Arc::new(messages::MessageDump::from_file(
-        "messages.html",
-        &taki_names,
-    ));
+    let taki = taki::Taki::new(messages.clone(), channel_id, redis);
+    let chain = chain::Chain::new(chain_data);
+    let joker = joker::Joker::new(messages.clone()).unwrap();
+
+    MessageHandlers { taki, chain, joker }
+}
+
+fn init_messages() -> Arc<messages::MessageDump> {
+    let msg_name_env = std::env::var("MSG_NAMES").unwrap_or_default();
+    let msg_names: Vec<&str> = msg_name_env.split(',').map(|n| n.trim()).collect();
+
+    let messages = messages::MessageDump::from_file("messages.html", &msg_names);
     let message_authors = messages
         .authors
         .iter()
@@ -93,16 +110,9 @@ fn init_taki(channel_id: u64, redis: &storage::Redis) -> taki::Taki {
         .collect::<Vec<_>>()
         .join(", ");
     println!(
-        "Taki: {} messages from the following authors: {}\n",
+        "{} messages from the following authors: {}\n",
         messages.texts.len(),
         message_authors
     );
-    taki::Taki::new(messages, channel_id, redis)
-}
-
-fn init_chain() -> chain::Chain {
-    let data: joebot_markov_chain::MarkovChain =
-        bincode::deserialize_from(File::open("chain.bin").unwrap()).unwrap();
-
-    chain::Chain::new(data)
+    Arc::new(messages)
 }

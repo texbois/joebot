@@ -2,3 +2,4 @@
 **/*.rs.bk
 messages*.html
 chain.bin
+joker/
