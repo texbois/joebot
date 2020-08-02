@@ -11,19 +11,29 @@ pub struct Joker {
     font: Font<'static>,
     mention_regex: Regex,
     rng: SmallRng,
+    source_images: Vec<Vec<u8>>,
 }
 
 impl Joker {
     pub fn new(messages: Arc<MessageDump>) -> JoeResult<Self> {
         let font = Font::try_from_vec(std::fs::read("joker/font.ttf")?).unwrap();
-        let mention_regex = Regex::new("(?:джокер)[еауом ]*([+]+)?").unwrap();
+        let mention_regex = Regex::new("(?i)(?:джокер)[а-я ]*([+]+)?").unwrap();
         let rng = SmallRng::from_entropy();
+
+        let mut source_images = Vec::new();
+        for entry in std::fs::read_dir("joker")? {
+            let path = entry?.path();
+            if path.extension().map(|s| s == "jpg").unwrap_or(false) {
+                source_images.push(std::fs::read(path)?);
+            }
+        }
 
         Ok(Self {
             messages,
             font,
             mention_regex,
             rng,
+            source_images,
         })
     }
 
@@ -34,8 +44,15 @@ impl Joker {
                 .map(|pluses| pluses.as_str().len())
                 .unwrap_or(0);
 
+            let time_started = std::time::Instant::now();
             if let Some((top, bottom)) = pick_top_bottom(&self.messages, &mut self.rng, min_words) {
-                let img = make_img("joker/1.jpg", top, bottom, &self.font)?;
+                let time_texts = std::time::Instant::now();
+
+                let source_img = self.source_images.choose(&mut self.rng).unwrap();
+                let img = make_img(source_img, top, bottom, &self.font)?;
+
+                let time_render = std::time::Instant::now();
+
                 msg.channel_id.send_message(&ctx.http, |m| {
                     m.add_file(AttachmentType::Bytes {
                         data: Cow::from(img),
@@ -43,6 +60,15 @@ impl Joker {
                     });
                     m
                 })?;
+
+                let time_message = std::time::Instant::now();
+                println!(
+                    "Joker: total {}ms, text pick: {}ms, image render: {}ms, network: {}ms",
+                    (time_message - time_started).as_millis(),
+                    (time_texts - time_started).as_millis(),
+                    (time_render - time_texts).as_millis(),
+                    (time_message - time_render).as_millis()
+                );
             } else {
                 let resp = std::iter::repeat("society")
                     .take(min_words)
@@ -69,7 +95,8 @@ fn pick_top_bottom<'a>(
         .texts
         .iter()
         .filter(|m| {
-            m.text.matches(' ').count() >= (min_words - 1) && m.text.chars().count() < max_len
+            (min_words == 0 || m.text.matches(' ').count() >= (min_words - 1))
+                && m.text.chars().count() < max_len
         })
         .collect::<Vec<_>>();
 
@@ -79,9 +106,8 @@ fn pick_top_bottom<'a>(
     Some((&top.text, &bottom.text))
 }
 
-fn make_img(source_path: &str, top: &str, bottom: &str, font: &Font) -> JoeResult<Vec<u8>> {
-    let raw_img = std::fs::read(source_path)?;
-    let mut canvas = artano::Canvas::read_from_buffer(&raw_img)?;
+fn make_img(source_img: &[u8], top: &str, bottom: &str, font: &Font) -> JoeResult<Vec<u8>> {
+    let mut canvas = artano::Canvas::read_from_buffer(source_img)?;
 
     let top = artano::Annotation::top(top);
     let bottom = artano::Annotation::bottom(bottom);
