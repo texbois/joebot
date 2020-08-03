@@ -24,3 +24,9 @@ Example command:
 ```
 MSG_NAMES="Ivan Ivanoff, Pavel Pavlov, Alexey Alexeev" cargo run --release
 ```
+
+## Image recognition
+
+```
+pip3 install --user -r requirements.txt
+```
