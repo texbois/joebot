@@ -1,5 +1,5 @@
 use crate::{messages::MessageDump, JoeResult};
-use rand::{rngs::SmallRng, seq::SliceRandom, SeedableRng};
+use rand::{rngs::SmallRng, SeedableRng};
 use regex::Regex;
 use rust_stemmers::Stemmer;
 use serenity::{model::prelude::*, prelude::*};
@@ -9,20 +9,23 @@ use std::sync::Arc;
 pub struct Wdyt {
     messages: Arc<MessageDump>,
     trigger_regex: Regex,
-    stemmer: Stemmer,
+    en_stemmer: Stemmer,
+    ru_stemmer: Stemmer,
     rng: SmallRng,
 }
 
 impl Wdyt {
     pub fn new(messages: Arc<MessageDump>) -> JoeResult<Self> {
         let trigger_regex = Regex::new(r"(?i)(?:что (?:ты )?думаешь (?:об?|про|насчет)|как тебе|(?:тво[её]|ваше) мнение об?|как (?:ты )?относишься ко?)\s+(.+)").unwrap();
-        let stemmer = Stemmer::create(rust_stemmers::Algorithm::Russian);
+        let en_stemmer = Stemmer::create(rust_stemmers::Algorithm::English);
+        let ru_stemmer = Stemmer::create(rust_stemmers::Algorithm::Russian);
         let rng = SmallRng::from_entropy();
 
         Ok(Self {
             messages,
             trigger_regex,
-            stemmer,
+            en_stemmer,
+            ru_stemmer,
             rng,
         })
     }
@@ -35,7 +38,13 @@ impl Wdyt {
                 .collect::<Vec<_>>();
             let stems = words
                 .iter()
-                .map(|w| self.stemmer.stem(&w))
+                .map(|w| {
+                    if w.is_ascii() {
+                        self.en_stemmer.stem(&w)
+                    } else {
+                        self.ru_stemmer.stem(&w)
+                    }
+                })
                 .collect::<Vec<_>>();
 
             let resp = match pick_text(&self.messages, &mut self.rng, &stems) {
@@ -56,20 +65,7 @@ fn pick_text<'a>(
     rng: &mut SmallRng,
     stems: &[Cow<str>],
 ) -> Option<&'a str> {
-    let texts = messages
-        .texts
-        .iter()
-        .filter(|m| {
-            if m.text.chars().count() >= 2000 {
-                /* Exceeds the limit set by Discord */
-                return false;
-            }
-            let words = m.text.split(' ').collect::<Vec<_>>();
-            stems
-                .iter()
-                .all(|s| words.iter().any(|w| w.starts_with(s.as_ref())))
-        })
-        .collect::<Vec<_>>();
-
-    texts.choose(rng).map(|t| t.text.as_str())
+    messages
+        .random_message_with_all_stems(stems, rng)
+        .map(|msg| msg.text.as_str())
 }

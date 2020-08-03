@@ -1,5 +1,5 @@
 use crate::{messages::MessageDump, JoeResult};
-use rand::{rngs::SmallRng, seq::SliceRandom, SeedableRng};
+use rand::{rngs::SmallRng, SeedableRng};
 use serenity::{model::prelude::*, prelude::*};
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
@@ -61,23 +61,8 @@ fn pick_text<'a>(
     rng: &mut SmallRng,
     keyword_stems_by_tier: &[Vec<&str>],
 ) -> Option<&'a str> {
-    for stems in keyword_stems_by_tier {
-        let texts = messages
-            .texts
-            .iter()
-            .filter(|m| {
-                if m.text.chars().count() >= 2000 {
-                    /* Exceeds the limit set by Discord */
-                    return false;
-                }
-                let words = m.text.split(' ').collect::<Vec<_>>();
-                stems.iter().any(|s| words.iter().any(|w| w.starts_with(s)))
-            })
-            .collect::<Vec<_>>();
-
-        if !texts.is_empty() {
-            return Some(texts.choose(rng).unwrap().text.as_str());
-        }
-    }
-    None
+    keyword_stems_by_tier
+        .iter()
+        .find_map(|stems| messages.random_message_with_any_stem(stems, rng))
+        .map(|msg| msg.text.as_str())
 }

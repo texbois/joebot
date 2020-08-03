@@ -1,3 +1,5 @@
+use rand::{seq::SliceRandom, Rng};
+use std::collections::{BTreeSet, HashMap};
 use vkopt_message_parser::reader::{fold_html, EventResult, MessageEvent};
 
 #[derive(Debug, Clone)]
@@ -16,6 +18,7 @@ pub struct Message {
 pub struct MessageDump {
     pub authors: Vec<Author>,
     pub texts: Vec<Message>,
+    word_stem_to_text_idx: HashMap<String, Vec<u32>>,
 }
 
 impl MessageDump {
@@ -73,6 +76,88 @@ impl MessageDump {
             },
         )
         .unwrap();
-        Self { authors, texts }
+
+        let word_stem_to_text_idx = build_word_stem_to_text_idx(&texts);
+
+        Self {
+            authors,
+            texts,
+            word_stem_to_text_idx,
+        }
     }
+
+    pub fn random_message_with_any_stem<'s, S: AsRef<str>, R: Rng>(
+        &'s self,
+        stems: &[S],
+        rng: &mut R,
+    ) -> Option<&'s Message> {
+        let text_indexes = stems
+            .iter()
+            .filter_map(|s| self.word_stem_to_text_idx.get(s.as_ref()))
+            .flatten()
+            .copied()
+            .collect::<Vec<u32>>();
+        text_indexes
+            .choose(rng)
+            .map(|&idx| &self.texts[idx as usize])
+    }
+
+    pub fn random_message_with_all_stems<'s, S: AsRef<str>, R: Rng>(
+        &'s self,
+        stems: &[S],
+        rng: &mut R,
+    ) -> Option<&'s Message> {
+        let stem_indexes = stems
+            .iter()
+            .filter_map(|s| {
+                self.word_stem_to_text_idx
+                    .get(s.as_ref())
+                    .map(|idxs| idxs.iter().copied().collect::<BTreeSet<u32>>())
+            })
+            .collect::<Vec<BTreeSet<u32>>>();
+
+        let mut indexes_with_all_stems = Vec::new();
+        for idx in &stem_indexes[0] {
+            if stem_indexes.iter().all(|s| s.contains(&idx)) {
+                indexes_with_all_stems.push(*idx);
+            }
+        }
+
+        indexes_with_all_stems
+            .choose(rng)
+            .map(|&idx| &self.texts[idx as usize])
+    }
+}
+
+fn build_word_stem_to_text_idx(texts: &Vec<Message>) -> HashMap<String, Vec<u32>> {
+    let mut map: HashMap<String, Vec<u32>> = HashMap::new();
+
+    let en_stemmer = rust_stemmers::Stemmer::create(rust_stemmers::Algorithm::English);
+    let ru_stemmer = rust_stemmers::Stemmer::create(rust_stemmers::Algorithm::Russian);
+
+    for (idx, msg) in texts.iter().enumerate() {
+        if msg.text.chars().count() >= 2000 {
+            /* Exceeds the limit set by Discord */
+            continue;
+        }
+        for word in msg.text.split_ascii_whitespace() {
+            let stemmer = if word.is_ascii() {
+                &en_stemmer
+            } else {
+                &ru_stemmer
+            };
+            let stem: String = stemmer.stem(word).into();
+
+            match map.get_mut(&stem) {
+                Some(indexes) => {
+                    indexes.push(idx as u32);
+                }
+                None => {
+                    map.insert(stem, vec![idx as u32]);
+                }
+            }
+        }
+    }
+
+    map
 }
