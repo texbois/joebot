@@ -12,6 +12,7 @@ mod utils;
 use serenity::{model::prelude::*, prelude::*};
 
 mod chain;
+mod img2msg;
 mod joker;
 mod taki;
 mod wdyt;
@@ -21,6 +22,7 @@ struct MessageHandlers {
     chain: chain::Chain,
     joker: joker::Joker,
     wdyt: wdyt::Wdyt,
+    img2msg: img2msg::Img2msg,
 }
 
 struct Handler {
@@ -52,6 +54,10 @@ impl Handler {
         }
         let wdyt_result = handlers.wdyt.handle_message(&ctx, &msg);
         if wdyt_result.map_err(|e| format!("Wdyt: {:?}", e))? {
+            return Ok(());
+        }
+        let img2msg_result = handlers.img2msg.handle_message(&ctx, &msg);
+        if img2msg_result.map_err(|e| format!("Img2msg: {:?}", e))? {
             return Ok(());
         }
 
@@ -113,12 +119,14 @@ fn init_handlers(channel_id: u64, redis: &storage::Redis) -> MessageHandlers {
     let chain = chain::Chain::new(chain_data);
     let joker = joker::Joker::new(messages.clone()).unwrap();
     let wdyt = wdyt::Wdyt::new(messages.clone()).unwrap();
+    let img2msg = img2msg::Img2msg::new(messages.clone()).unwrap();
 
     MessageHandlers {
         taki,
         chain,
         joker,
         wdyt,
+        img2msg,
     }
 }
 
