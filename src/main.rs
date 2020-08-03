@@ -9,7 +9,7 @@ mod messages;
 mod storage;
 mod utils;
 
-use serenity::{model::prelude::*, prelude::*};
+use serenity::{model::prelude::*, prelude::*, utils::MessageBuilder};
 
 mod chain;
 mod img2msg;
@@ -60,11 +60,31 @@ impl Handler {
         if img2msg_result.map_err(|e| format!("Img2msg: {:?}", e))? {
             return Ok(());
         }
-
-        if msg.content == "!ping" {
+        if msg.content.starts_with('!') {
+            let help = MessageBuilder::new()
+                .push_mono("!takistart")
+                .push_line(" — сыграем в таки")
+                .push_mono("!takisuspects")
+                .push_line(" — бросим взгляд на плакаты о розыске")
+                .push_mono("!takistats")
+                .push_line(" — поднимем бокал крепкого виски за самых метких стрелков")
+                .push_mono("!mashup")
+                .push_line(" — узнаем от бармена последние слухи")
+                .push_mono("!mashupmore")
+                .push_line(" — посплетничаем еще")
+                .push_mono("!mashupstars")
+                .push_line(" — поприветствуем жителей городка")
+                .push_line("")
+                .push_underline_line("поговорим с джо:")
+                .push_mono_line("что думаешь об итмо и бонче")
+                .push_mono_line("джокер++")
+                .push_line("")
+                .push_underline_line("займемся делом:")
+                .push_italic_line("покажи джо фотокарточку, о которой хочешь узнать побольше")
+                .build();
             msg.channel_id
-                .say(&ctx.http, "Pong!")
-                .map_err(|e| format!("Ping: {:?}", e))?;
+                .say(&ctx.http, &help)
+                .map_err(|e| format!("Help: {:?}", e))?;
         }
         Ok(())
     }
