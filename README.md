@@ -3,6 +3,10 @@
 _Taki_ ([Polish](https://en.wiktionary.org/wiki/taki#Polish) for _such_) is a guessing game
 for chatrooms where people think they know each other well :^)
 
+## Acknowledgements
+
+_WDYT_ and _Joker_ functionality is ported from [sunDalik/vk-bot](https://github.com/sunDalik/vk-bot).
+
 ## Legacy versions
 
 * [Telegram](https://github.com/texbois/joebot/tree/telegram/) (pretty lightweight thanks to a handwritten API client)
