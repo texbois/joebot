@@ -1,4 +1,7 @@
-use crate::{messages::MessageDump, JoeResult};
+use crate::{
+    messages::{Author, MessageDump},
+    JoeResult,
+};
 use rand::{rngs::SmallRng, SeedableRng};
 use serenity::{model::prelude::*, prelude::*};
 use std::io::{Read, Write};
@@ -45,8 +48,27 @@ impl Img2msg {
 
                 println!("{:?}", tiered_kw_stems);
 
-                if let Some(t) = pick_text(&self.messages, &mut self.rng, &tiered_kw_stems) {
-                    msg.channel_id.say(&ctx.http, t)?;
+                if let Some((author, text)) =
+                    pick_text(&self.messages, &mut self.rng, &tiered_kw_stems)
+                {
+                    let kw_stems = tiered_kw_stems
+                        .iter()
+                        .map(|ss| *ss.first().unwrap())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+
+                    msg.channel_id.send_message(&ctx.http, |m| {
+                        m.embed(|e| {
+                            e.color(crate::EMBED_COLOR);
+                            e.description(text);
+                            e.footer(|f| {
+                                f.text(format!("— {} о {}", author.short_name, kw_stems));
+                                f
+                            });
+                            e
+                        });
+                        m
+                    })?;
                 }
 
                 Ok(true)
@@ -60,9 +82,9 @@ fn pick_text<'a>(
     messages: &'a MessageDump,
     rng: &mut SmallRng,
     keyword_stems_by_tier: &[Vec<&str>],
-) -> Option<&'a str> {
+) -> Option<(&'a Author, &'a str)> {
     keyword_stems_by_tier
         .iter()
         .find_map(|stems| messages.random_message_with_any_stem(stems, rng))
-        .map(|msg| msg.text.as_str())
+        .map(|msg| (&messages.authors[msg.author_idx], msg.text.as_str()))
 }

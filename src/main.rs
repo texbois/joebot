@@ -1,17 +1,18 @@
+use serenity::{model::prelude::*, prelude::*, utils::Color};
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::error::Error;
 use std::fs::File;
 use std::sync::Arc;
-use std::collections::HashSet;
 
 pub type JoeResult<T> = Result<T, Box<dyn Error>>;
+
+pub const EMBED_COLOR: Color = Color::new(0x7a4c50);
 
 mod commands;
 mod messages;
 mod storage;
 mod utils;
-
-use serenity::{model::prelude::*, prelude::*, utils::MessageBuilder};
 
 struct MessageHandlers {
     taki: commands::Taki,
@@ -62,31 +63,53 @@ impl Handler {
             return Ok(());
         }
         if msg.content.starts_with('!') {
-            let help = MessageBuilder::new()
-                .push_mono("!takistart")
-                .push_line(" — сыграем в таки")
-                .push_mono("!takisuspects")
-                .push_line(" — бросим взгляд на плакаты о розыске")
-                .push_mono("!takistats")
-                .push_line(" — поднимем бокал крепкого виски за самых метких стрелков")
-                .push_mono("!mashup")
-                .push_line(" — узнаем от бармена последние слухи")
-                .push_mono("!mashupmore")
-                .push_line(" — посплетничаем еще")
-                .push_mono("!mashupstars")
-                .push_line(" — поприветствуем жителей городка")
-                .push_mono("!poll")
-                .push_line(" — устроим честный суд")
-                .push_line("")
-                .push_underline_line("поговорим с джо:")
-                .push_mono_line("что думаешь об итмо и бонче")
-                .push_mono_line("джокер++")
-                .push_line("")
-                .push_underline_line("займемся делом:")
-                .push_italic_line("покажи джо фотокарточку, о которой хочешь узнать побольше")
-                .build();
             msg.channel_id
-                .say(&ctx.http, &help)
+                .send_message(&ctx.http, |m| {
+                    m.embed(|e| {
+                        e.color(EMBED_COLOR);
+                        e.title("Joe's Saloon");
+                        e.field(
+                            "таки",
+                            r#"
+`!takistart` — начнем партию
+`!takisuspects` — бросим взгляд на плакаты о розыске
+`!takistats` — поднимем бокал крепкого виски за самых метких стрелков
+                    "#,
+                            false,
+                        );
+                        e.field(
+                            "мэшап",
+                            r#"
+`!mashup` — узнаем от бармена последние слухи
+`!mashupmore` — посплетничаем еще
+`!mashupstars` — поприветствуем жителей городка
+"#,
+                            false,
+                        );
+                        e.field(
+                            "политика",
+                            r#"
+`!poll` — устроим честный суд
+"#,
+                            false,
+                        );
+                        e.field(
+                            "поговорим с джо",
+                            r#"
+`что думаешь об итмо и бонче`
+`джокер++`
+"#,
+                            false,
+                        );
+                        e.field(
+                            "займемся делом",
+                            "_покажи джо фотокарточку, о которой хочешь разузнать побольше_",
+                            false,
+                        );
+                        e
+                    });
+                    m
+                })
                 .map_err(|e| format!("Help: {:?}", e))?;
         }
         Ok(())

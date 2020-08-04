@@ -66,6 +66,7 @@ impl Joker {
                     }],
                     |m| {
                         m.embed(|e| {
+                            e.color(crate::EMBED_COLOR);
                             e.attachment("joker.jpg");
                             e.footer(|f| {
                                 f.text(format!(
