@@ -1,5 +1,5 @@
 use rand::{seq::SliceRandom, Rng};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{HashMap, HashSet};
 use vkopt_message_parser::reader::{fold_html, EventResult, MessageEvent};
 
 #[derive(Debug, Clone)]
@@ -22,7 +22,7 @@ pub struct MessageDump {
 }
 
 impl MessageDump {
-    pub fn from_file<S: AsRef<str>>(input_file: &str, names: &[S]) -> Self {
+    pub fn from_file(input_file: &str, names: &HashSet<&str>) -> Self {
         let mut authors: Vec<Author> = Vec::new();
         let texts = fold_html(
             input_file,
@@ -41,9 +41,7 @@ impl MessageDump {
                         EventResult::Consumed(msgs)
                     }
                 },
-                MessageEvent::FullNameExtracted(full_name)
-                    if !names.iter().any(|n| n.as_ref() == full_name) =>
-                {
+                MessageEvent::FullNameExtracted(full_name) if !names.contains(full_name) => {
                     EventResult::SkipMessage(msgs)
                 }
                 MessageEvent::FullNameExtracted(full_name) => {
@@ -112,9 +110,9 @@ impl MessageDump {
             .filter_map(|s| {
                 self.word_stem_to_text_idx
                     .get(s.as_ref())
-                    .map(|idxs| idxs.iter().copied().collect::<BTreeSet<u32>>())
+                    .map(|idxs| idxs.iter().copied().collect::<HashSet<u32>>())
             })
-            .collect::<Vec<BTreeSet<u32>>>();
+            .collect::<Vec<HashSet<u32>>>();
 
         let mut indexes_with_all_stems = Vec::new();
         for idx in &stem_indexes[0] {

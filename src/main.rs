@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::error::Error;
 use std::fs::File;
 use std::sync::Arc;
+use std::collections::HashSet;
 
 pub type JoeResult<T> = Result<T, Box<dyn Error>>;
 
@@ -147,7 +148,7 @@ fn init_handlers(channel_id: u64, redis: &storage::Redis) -> MessageHandlers {
 
 fn init_messages() -> Arc<messages::MessageDump> {
     let msg_name_env = std::env::var("MSG_NAMES").unwrap_or_default();
-    let msg_names: Vec<&str> = msg_name_env.split(',').map(|n| n.trim()).collect();
+    let msg_names: HashSet<&str> = msg_name_env.split(',').map(|n| n.trim()).collect();
 
     let messages = messages::MessageDump::from_file("messages.html", &msg_names);
     let message_authors = messages
