@@ -16,6 +16,7 @@ use serenity::{model::prelude::*, prelude::*, utils::MessageBuilder};
 struct MessageHandlers {
     taki: commands::Taki,
     chain: commands::Chain,
+    poll: commands::Poll,
     joker: commands::Joker,
     wdyt: commands::Wdyt,
     img2msg: commands::Img2msg,
@@ -44,6 +45,10 @@ impl Handler {
         if chain_result.map_err(|e| format!("Chain: {:?}", e))? {
             return Ok(());
         }
+        let poll_result = handlers.poll.handle_message(&ctx, &msg);
+        if poll_result.map_err(|e| format!("Poll: {:?}", e))? {
+            return Ok(());
+        }
         let joker_result = handlers.joker.handle_message(&ctx, &msg);
         if joker_result.map_err(|e| format!("Joker: {:?}", e))? {
             return Ok(());
@@ -70,6 +75,8 @@ impl Handler {
                 .push_line(" — посплетничаем еще")
                 .push_mono("!mashupstars")
                 .push_line(" — поприветствуем жителей городка")
+                .push_mono("!poll")
+                .push_line(" — устроим честный суд")
                 .push_line("")
                 .push_underline_line("поговорим с джо:")
                 .push_mono_line("что думаешь об итмо и бонче")
@@ -133,6 +140,7 @@ fn init_handlers(channel_id: u64, redis: &storage::Redis) -> MessageHandlers {
 
     let taki = commands::Taki::new(messages.clone(), channel_id, redis);
     let chain = commands::Chain::new(chain_data);
+    let poll = commands::Poll::new();
     let joker = commands::Joker::new(messages.clone()).unwrap();
     let wdyt = commands::Wdyt::new(messages.clone()).unwrap();
     let img2msg = commands::Img2msg::new(messages.clone()).unwrap();
@@ -140,6 +148,7 @@ fn init_handlers(channel_id: u64, redis: &storage::Redis) -> MessageHandlers {
     MessageHandlers {
         taki,
         chain,
+        poll,
         joker,
         wdyt,
         img2msg,
