@@ -1,4 +1,7 @@
-use crate::{messages::MessageDump, JoeResult};
+use crate::{
+    messages::{Author, MessageDump},
+    JoeResult,
+};
 use artano::Font;
 use rand::{rngs::SmallRng, seq::SliceRandom, SeedableRng};
 use regex::Regex;
@@ -45,21 +48,37 @@ impl Joker {
                 .unwrap_or(0);
 
             let time_started = std::time::Instant::now();
-            if let Some((top, bottom)) = pick_top_bottom(&self.messages, &mut self.rng, min_words) {
+            if let Some(((top_author, top_text), (bottom_author, bottom_text))) =
+                pick_top_bottom(&self.messages, &mut self.rng, min_words)
+            {
                 let time_texts = std::time::Instant::now();
 
                 let source_img = self.source_images.choose(&mut self.rng).unwrap();
-                let img = make_img(source_img, top, bottom, &self.font)?;
+                let img = make_img(source_img, top_text, bottom_text, &self.font)?;
 
                 let time_render = std::time::Instant::now();
 
-                msg.channel_id.send_message(&ctx.http, |m| {
-                    m.add_file(AttachmentType::Bytes {
+                msg.channel_id.send_files(
+                    &ctx.http,
+                    vec![AttachmentType::Bytes {
                         data: Cow::from(img),
                         filename: "joker.jpg".into(),
-                    });
-                    m
-                })?;
+                    }],
+                    |m| {
+                        m.embed(|e| {
+                            e.attachment("joker.jpg");
+                            e.footer(|f| {
+                                f.text(format!(
+                                    "This meme was made by {}, {} and joe",
+                                    top_author.short_name, bottom_author.short_name
+                                ));
+                                f
+                            });
+                            e
+                        });
+                        m
+                    },
+                )?;
 
                 let time_message = std::time::Instant::now();
                 println!(
@@ -88,7 +107,7 @@ fn pick_top_bottom<'a>(
     messages: &'a MessageDump,
     rng: &mut SmallRng,
     min_words: usize,
-) -> Option<(&'a str, &'a str)> {
+) -> Option<((&'a Author, &'a str), (&'a Author, &'a str))> {
     let max_len = std::cmp::max(150, 50 + 8 * min_words);
 
     let texts = messages
@@ -100,10 +119,14 @@ fn pick_top_bottom<'a>(
         })
         .collect::<Vec<_>>();
 
-    let top = texts.choose(rng)?;
-    let bottom = texts.choose(rng)?;
+    let top = texts
+        .choose(rng)
+        .map(|msg| (&messages.authors[msg.author_idx], msg.text.as_str()))?;
+    let bottom = texts
+        .choose(rng)
+        .map(|msg| (&messages.authors[msg.author_idx], msg.text.as_str()))?;
 
-    Some((&top.text, &bottom.text))
+    Some((top, bottom))
 }
 
 fn make_img(source_img: &[u8], top: &str, bottom: &str, font: &Font) -> JoeResult<Vec<u8>> {
