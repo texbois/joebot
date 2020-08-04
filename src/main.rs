@@ -5,24 +5,19 @@ use std::sync::Arc;
 
 pub type JoeResult<T> = Result<T, Box<dyn Error>>;
 
+mod commands;
 mod messages;
 mod storage;
 mod utils;
 
 use serenity::{model::prelude::*, prelude::*, utils::MessageBuilder};
 
-mod chain;
-mod img2msg;
-mod joker;
-mod taki;
-mod wdyt;
-
 struct MessageHandlers {
-    taki: taki::Taki,
-    chain: chain::Chain,
-    joker: joker::Joker,
-    wdyt: wdyt::Wdyt,
-    img2msg: img2msg::Img2msg,
+    taki: commands::Taki,
+    chain: commands::Chain,
+    joker: commands::Joker,
+    wdyt: commands::Wdyt,
+    img2msg: commands::Img2msg,
 }
 
 struct Handler {
@@ -135,11 +130,11 @@ fn init_handlers(channel_id: u64, redis: &storage::Redis) -> MessageHandlers {
     let chain_data: joebot_markov_chain::MarkovChain =
         bincode::deserialize_from(File::open("chain.bin").unwrap()).unwrap();
 
-    let taki = taki::Taki::new(messages.clone(), channel_id, redis);
-    let chain = chain::Chain::new(chain_data);
-    let joker = joker::Joker::new(messages.clone()).unwrap();
-    let wdyt = wdyt::Wdyt::new(messages.clone()).unwrap();
-    let img2msg = img2msg::Img2msg::new(messages.clone()).unwrap();
+    let taki = commands::Taki::new(messages.clone(), channel_id, redis);
+    let chain = commands::Chain::new(chain_data);
+    let joker = commands::Joker::new(messages.clone()).unwrap();
+    let wdyt = commands::Wdyt::new(messages.clone()).unwrap();
+    let img2msg = commands::Img2msg::new(messages.clone()).unwrap();
 
     MessageHandlers {
         taki,
