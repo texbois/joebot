@@ -12,7 +12,7 @@ const MESSAGES_SHOWN: usize = 3;
 const START_MESSAGES: [(&str, &str); 3] = [
     ("Один мудрец сказал:", "Кто же это был?"),
     (
-        "Последний раз подозреваемого видели в местном баре, где он произнес:",
+        "Последний раз подозреваемого видели в соседнем баре, где он произнес:",
         "Найдите мне этого пса!",
     ),
     ("Дружок-пирожок оставил вам послание:", "Узнали?"),
@@ -25,7 +25,7 @@ const WIN_MESSAGES: [&str; 3] = [
 const LOSE_MESSAGES: [&str; 4] = [
     "Казино не взломано.",
     "Игра закрыта, неудачники.",
-    "Очень жаль, но вы проиграли.",
+    "Очень жаль, но вы проиграли... Жалкие псы!",
     "Удачи в другой раз, амигос.",
 ];
 
@@ -62,14 +62,18 @@ impl Taki {
                 });
                 let (start_prefix, start_suffix) = START_MESSAGES.choose(&mut self.rng).unwrap();
 
-                let resp = format!(
-                    "{}\n\n* {}\n\n{}",
-                    start_prefix,
-                    messages.join("\n* "),
-                    start_suffix
-                );
+                let resp = format!("* {}\n\n{}", messages.join("\n* "), start_suffix);
 
-                msg.channel_id.say(&ctx.http, resp)?;
+                msg.channel_id.send_message(&ctx.http, |m| {
+                    m.embed(|e| {
+                        e.color(crate::EMBED_COLOR);
+                        e.title(start_prefix);
+                        e.description(resp);
+                        e
+                    });
+                    m
+                })?;
+
                 Ok(true)
             }
             ("!takistats", _) => {
@@ -79,18 +83,33 @@ impl Taki {
 
                 for (index, (uid, score)) in scores.into_iter().enumerate() {
                     let user = UserId(uid).to_user(ctx)?;
-                    write!(&mut stats, "{}) {} -- {}\n", index + 1, user.name, score)?;
+                    write!(&mut stats, "{}) {} — {}\n", index + 1, user.name, score)?;
                 }
 
-                msg.channel_id
-                    .say(&ctx.http, format!("Статы:\n{}", stats))?;
+                msg.channel_id.send_message(&ctx.http, |m| {
+                    m.embed(|e| {
+                        e.color(crate::EMBED_COLOR);
+                        e.title("Мастера Таки");
+                        e.description(stats);
+                        e
+                    });
+                    m
+                })?;
+
                 Ok(true)
             }
             ("!takisuspects", _) => {
                 let suspects = list_suspects(&self.messages).join("\n");
-                let resp = format!("Подозреваемые:\n{}", suspects);
+                msg.channel_id.send_message(&ctx.http, |m| {
+                    m.embed(|e| {
+                        e.color(crate::EMBED_COLOR);
+                        e.title("Подозреваемые");
+                        e.description(suspects);
+                        e
+                    });
+                    m
+                })?;
 
-                msg.channel_id.say(&ctx.http, resp)?;
                 Ok(true)
             }
             (_, Some(ref mut game)) => {
@@ -99,32 +118,43 @@ impl Taki {
                 if text_lower == game.suspect.short_name.to_lowercase()
                     || text_lower == game.suspect.full_name.to_lowercase()
                 {
-                    let reply = format!(
-                        "{}\n{} +{}",
-                        WIN_MESSAGES.choose(&mut self.rng).unwrap(),
-                        msg.author.name,
-                        game.score
-                    );
+                    let title = WIN_MESSAGES.choose(&mut self.rng).unwrap();
+                    let resp = format!("{} +{}", msg.author.name, game.score);
 
                     self.storage
                         .incr_in_set("scores", msg.author.id.0, game.score)?;
                     self.ongoing = None;
 
-                    msg.channel_id.say(&ctx.http, reply)?;
+                    msg.channel_id.send_message(&ctx.http, |m| {
+                        m.embed(|e| {
+                            e.color(crate::EMBED_COLOR);
+                            e.title(title);
+                            e.description(resp);
+                            e
+                        });
+                        m
+                    })?;
                 } else {
                     game.score -= 1;
 
                     if game.score == 0 {
-                        let reply = format!(
-                            "{}\nЭто был {} ({})",
-                            LOSE_MESSAGES.choose(&mut self.rng).unwrap(),
-                            game.suspect.full_name,
-                            game.suspect.short_name
+                        let title = LOSE_MESSAGES.choose(&mut self.rng).unwrap();
+                        let resp = format!(
+                            "Это был {} ({})",
+                            game.suspect.full_name, game.suspect.short_name
                         );
 
                         self.ongoing = None;
 
-                        msg.channel_id.say(&ctx.http, reply)?;
+                        msg.channel_id.send_message(&ctx.http, |m| {
+                            m.embed(|e| {
+                                e.color(crate::EMBED_COLOR);
+                                e.title(title);
+                                e.description(resp);
+                                e
+                            });
+                            m
+                        })?;
                     }
                 }
                 Ok(true)
@@ -141,7 +171,7 @@ fn list_suspects(messages: &MessageDump) -> Vec<String> {
         .enumerate()
         .map(|(idx, author)| {
             format!(
-                "{}) {} под псевдонимом \"{}\"",
+                "{}) _{}_ под псевдонимом `{}`",
                 idx + 1,
                 author.full_name,
                 author.short_name,

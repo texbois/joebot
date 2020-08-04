@@ -114,6 +114,10 @@ impl MessageDump {
             })
             .collect::<Vec<HashSet<u32>>>();
 
+        if stem_indexes.is_empty() {
+            return None;
+        }
+
         let mut indexes_with_all_stems = Vec::new();
         for idx in &stem_indexes[0] {
             if stem_indexes.iter().all(|s| s.contains(&idx)) {
