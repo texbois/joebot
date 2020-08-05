@@ -31,8 +31,8 @@ impl<'a> super::Command for Img2msg<'a> {
             Some(a) if a.width.is_some() => {
                 let data = a.download()?;
 
-                self.classifier.write(&(data.len() as u32).to_be_bytes())?;
-                self.classifier.write(&data)?;
+                self.classifier.write_all(&(data.len() as u32).to_be_bytes())?;
+                self.classifier.write_all(&data)?;
 
                 let mut result_size_bytes = [0u8; 4];
                 self.classifier.read_exact(&mut result_size_bytes)?;

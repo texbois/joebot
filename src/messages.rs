@@ -129,7 +129,7 @@ impl MessageDump {
     }
 }
 
-fn build_word_stem_to_text_idx(texts: &Vec<Message>) -> HashMap<String, Vec<u32>> {
+fn build_word_stem_to_text_idx(texts: &[Message]) -> HashMap<String, Vec<u32>> {
     let mut map: HashMap<String, Vec<u32>> = HashMap::new();
 
     let en_stemmer = rust_stemmers::Stemmer::create(rust_stemmers::Algorithm::English);
