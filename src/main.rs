@@ -143,12 +143,15 @@ fn main() {
         .map_err(|e| format!("redis: {}", e))
         .unwrap();
 
+    println!("{}", "* Starting command handlers");
     let message_handlers = Mutex::new(init_handlers(bot_channel_id, &redis));
     let handler = Handler {
         bot_user: Mutex::new(RefCell::new(None)),
         bot_channel_id: ChannelId(bot_channel_id),
         message_handlers,
     };
+
+    println!("{}", "* Connecting to Discord");
     let mut client = Client::new(&bot_token, handler).unwrap();
 
     if let Err(e) = client.start() {
