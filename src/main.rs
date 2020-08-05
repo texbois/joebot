@@ -38,19 +38,10 @@ lazy_static! {
     };
 }
 
-struct MessageHandlers<'a> {
-    taki: commands::Taki<'a>,
-    chain: commands::Chain,
-    poll: commands::Poll,
-    joker: commands::Joker<'a>,
-    wdyt: commands::Wdyt<'a>,
-    img2msg: commands::Img2msg<'a>,
-}
-
 struct Handler<'a> {
     bot_user: Mutex<RefCell<Option<CurrentUser>>>,
     bot_channel_id: ChannelId,
-    message_handlers: Mutex<MessageHandlers<'a>>,
+    dispatcher: Mutex<commands::CommandDispatcher<'a>>,
 }
 
 impl<'a> Handler<'a> {
@@ -60,30 +51,7 @@ impl<'a> Handler<'a> {
                 return Ok(());
             }
         }
-
-        let mut handlers = self.message_handlers.lock();
-        let taki_result = handlers.taki.handle_message(&ctx, &msg);
-        if taki_result.map_err(|e| format!("Taki: {:?}", e))? {
-            return Ok(());
-        }
-        let chain_result = handlers.chain.handle_message(&ctx, &msg);
-        if chain_result.map_err(|e| format!("Chain: {:?}", e))? {
-            return Ok(());
-        }
-        let poll_result = handlers.poll.handle_message(&ctx, &msg);
-        if poll_result.map_err(|e| format!("Poll: {:?}", e))? {
-            return Ok(());
-        }
-        let joker_result = handlers.joker.handle_message(&ctx, &msg);
-        if joker_result.map_err(|e| format!("Joker: {:?}", e))? {
-            return Ok(());
-        }
-        let wdyt_result = handlers.wdyt.handle_message(&ctx, &msg);
-        if wdyt_result.map_err(|e| format!("Wdyt: {:?}", e))? {
-            return Ok(());
-        }
-        let img2msg_result = handlers.img2msg.handle_message(&ctx, &msg);
-        if img2msg_result.map_err(|e| format!("Img2msg: {:?}", e))? {
+        if self.dispatcher.lock().handle_message(&ctx, &msg)? {
             return Ok(());
         }
         if msg.content.starts_with('!') {
@@ -164,15 +132,15 @@ fn main() {
         .map_err(|e| format!("redis: {}", e))
         .unwrap();
 
-    println!("{}", "* Starting command handlers");
-    let message_handlers = Mutex::new(init_handlers(&CONFIG, &redis));
+    println!("* Starting command handlers");
+    let dispatcher = Mutex::new(init_dispatcher(&CONFIG, &redis));
     let handler = Handler {
         bot_user: Mutex::new(RefCell::new(None)),
         bot_channel_id: ChannelId(CONFIG.channel_id),
-        message_handlers,
+        dispatcher,
     };
 
-    println!("{}", "* Connecting to Discord");
+    println!("* Connecting to Discord");
     let mut client = Client::new(&bot_token, handler).unwrap();
 
     if let Err(e) = client.start() {
@@ -180,23 +148,26 @@ fn main() {
     }
 }
 
-fn init_handlers<'a>(conf: &'a config::Config, redis: &storage::Redis) -> MessageHandlers<'a> {
+fn init_dispatcher<'a>(
+    conf: &'a config::Config,
+    redis: &storage::Redis,
+) -> commands::CommandDispatcher<'a> {
     let chain_data: joebot_markov_chain::MarkovChain =
         bincode::deserialize_from(File::open("chain.bin").unwrap()).unwrap();
 
     let taki = commands::Taki::new(&MESSAGE_DUMP, &conf.user_matcher, conf.channel_id, redis);
     let chain = commands::Chain::new(chain_data);
     let poll = commands::Poll::new();
-    let joker = commands::Joker::new(&MESSAGE_DUMP).unwrap();
     let wdyt = commands::Wdyt::new(&MESSAGE_DUMP).unwrap();
+    let joker = commands::Joker::new(&MESSAGE_DUMP).unwrap();
     let img2msg = commands::Img2msg::new(&MESSAGE_DUMP).unwrap();
 
-    MessageHandlers {
-        taki,
-        chain,
-        poll,
-        joker,
-        wdyt,
-        img2msg,
-    }
+    commands::CommandDispatcher::new(vec![
+        Box::new(taki),
+        Box::new(chain),
+        Box::new(poll),
+        Box::new(wdyt),
+        Box::new(joker),
+        Box::new(img2msg),
+    ])
 }

@@ -28,8 +28,10 @@ impl<'a> Wdyt<'a> {
             rng,
         })
     }
+}
 
-    pub fn handle_message(&mut self, ctx: &Context, msg: &Message) -> JoeResult<bool> {
+impl<'a> super::Command for Wdyt<'a> {
+    fn handle_message(&mut self, ctx: &Context, msg: &Message) -> JoeResult<bool> {
         if let Some(captures) = self.trigger_regex.captures(&msg.content) {
             let words = captures[1]
                 .split(' ')

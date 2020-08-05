@@ -13,8 +13,10 @@ impl Poll {
             item_re: Regex::new(r#""([^"]+)""#).unwrap(),
         }
     }
+}
 
-    pub fn handle_message(&mut self, ctx: &Context, msg: &Message) -> JoeResult<bool> {
+impl super::Command for Poll {
+    fn handle_message(&mut self, ctx: &Context, msg: &Message) -> JoeResult<bool> {
         if !msg.content.starts_with("!poll") {
             return Ok(false);
         }

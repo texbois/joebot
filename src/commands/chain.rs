@@ -31,8 +31,10 @@ impl Chain {
             last_command: String::new(),
         }
     }
+}
 
-    pub fn handle_message(&mut self, ctx: &Context, msg: &Message) -> JoeResult<bool> {
+impl super::Command for Chain {
+    fn handle_message(&mut self, ctx: &Context, msg: &Message) -> JoeResult<bool> {
         let (command, rest) = split_command_rest(msg);
         let resp = match command {
             "!mashup" => {

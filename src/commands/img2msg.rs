@@ -23,8 +23,10 @@ impl<'a> Img2msg<'a> {
             classifier,
         })
     }
+}
 
-    pub fn handle_message(&mut self, ctx: &Context, msg: &Message) -> JoeResult<bool> {
+impl<'a> super::Command for Img2msg<'a> {
+    fn handle_message(&mut self, ctx: &Context, msg: &Message) -> JoeResult<bool> {
         match msg.attachments.first() {
             Some(a) if a.width.is_some() => {
                 let data = a.download()?;

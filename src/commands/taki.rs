@@ -57,8 +57,10 @@ impl<'a> Taki<'a> {
             rng: SmallRng::from_entropy(),
         }
     }
+}
 
-    pub fn handle_message(&mut self, ctx: &Context, msg: &Message) -> JoeResult<bool> {
+impl<'a> super::Command for Taki<'a> {
+    fn handle_message(&mut self, ctx: &Context, msg: &Message) -> JoeResult<bool> {
         match (msg.content.as_str(), &mut self.ongoing) {
             ("!takistart", None) => {
                 let (suspect, messages) = pick_random_suspect(&self.messages, &mut self.rng);
@@ -90,7 +92,7 @@ impl<'a> Taki<'a> {
 
                 for (index, (uid, score)) in scores.into_iter().enumerate() {
                     let user = UserId(uid).to_user(ctx)?;
-                    write!(&mut stats, "{}) {} — {}\n", index + 1, user.name, score)?;
+                    writeln!(&mut stats, "{}) {} — {}", index + 1, user.name, score)?;
                 }
 
                 msg.channel_id.send_message(&ctx.http, |m| {

@@ -38,8 +38,10 @@ impl<'a> Joker<'a> {
             source_images,
         })
     }
+}
 
-    pub fn handle_message(&mut self, ctx: &Context, msg: &Message) -> JoeResult<bool> {
+impl<'a> super::Command for Joker<'a> {
+    fn handle_message(&mut self, ctx: &Context, msg: &Message) -> JoeResult<bool> {
         if let Some(captures) = self.trigger_regex.captures(&msg.content) {
             let min_words = captures
                 .get(1)
