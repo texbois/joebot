@@ -1,3 +1,4 @@
+use lazy_static::lazy_static;
 use serenity::{model::prelude::*, prelude::*, utils::Color};
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -10,26 +11,35 @@ pub type JoeResult<T> = Result<T, Box<dyn Error>>;
 pub const EMBED_COLOR: Color = Color::new(0x7a4c50);
 
 mod commands;
+mod config;
 mod messages;
 mod storage;
 mod utils;
 
-struct MessageHandlers {
-    taki: commands::Taki,
+lazy_static! {
+    static ref CONFIG: config::Config = {
+        let conf_str = std::fs::read_to_string("config.json").expect("Cannot read config.json");
+        serde_json::from_str(&conf_str).unwrap()
+    };
+}
+
+struct MessageHandlers<'a> {
+    taki: commands::Taki<'a>,
     chain: commands::Chain,
     poll: commands::Poll,
     joker: commands::Joker,
     wdyt: commands::Wdyt,
     img2msg: commands::Img2msg,
+    m: std::marker::PhantomData<&'a ()>,
 }
 
-struct Handler {
+struct Handler<'a> {
     bot_user: Mutex<RefCell<Option<CurrentUser>>>,
     bot_channel_id: ChannelId,
-    message_handlers: Mutex<MessageHandlers>,
+    message_handlers: Mutex<MessageHandlers<'a>>,
 }
 
-impl Handler {
+impl<'a> Handler<'a> {
     fn handle_message(&self, ctx: Context, msg: Message) -> JoeResult<()> {
         if let Some(ref user) = *self.bot_user.lock().borrow() {
             if user.id == msg.author.id {
@@ -116,7 +126,7 @@ impl Handler {
     }
 }
 
-impl EventHandler for Handler {
+impl<'a> EventHandler for Handler<'a> {
     fn ready(&self, _: Context, ready: Ready) {
         println!("Connected as {}", ready.user.name);
         self.bot_user.lock().replace(Some(ready.user));
@@ -135,19 +145,16 @@ impl EventHandler for Handler {
 fn main() {
     let bot_token = std::env::var("BOT_TOKEN")
         .expect("Provide a valid bot token via the BOT_TOKEN environment variable");
-    let bot_channel_id: u64 = std::env::var("BOT_CHANNEL_ID")
-        .ok()
-        .and_then(|id| id.parse().ok())
-        .expect("Provide the bot's channel id via the BOT_CHANNEL_ID environment variable");
+
     let redis = storage::Redis::new("redis://127.0.0.1/")
         .map_err(|e| format!("redis: {}", e))
         .unwrap();
 
     println!("{}", "* Starting command handlers");
-    let message_handlers = Mutex::new(init_handlers(bot_channel_id, &redis));
+    let message_handlers = Mutex::new(init_handlers(&CONFIG, &redis));
     let handler = Handler {
         bot_user: Mutex::new(RefCell::new(None)),
-        bot_channel_id: ChannelId(bot_channel_id),
+        bot_channel_id: ChannelId(CONFIG.channel_id),
         message_handlers,
     };
 
@@ -159,12 +166,12 @@ fn main() {
     }
 }
 
-fn init_handlers(channel_id: u64, redis: &storage::Redis) -> MessageHandlers {
-    let messages = init_messages();
+fn init_handlers<'a>(conf: &'a config::Config, redis: &storage::Redis) -> MessageHandlers<'a> {
+    let messages = init_messages(conf);
     let chain_data: joebot_markov_chain::MarkovChain =
         bincode::deserialize_from(File::open("chain.bin").unwrap()).unwrap();
 
-    let taki = commands::Taki::new(messages.clone(), channel_id, redis);
+    let taki = commands::Taki::new(messages.clone(), &conf.user_matcher, conf.channel_id, redis);
     let chain = commands::Chain::new(chain_data);
     let poll = commands::Poll::new();
     let joker = commands::Joker::new(messages.clone()).unwrap();
@@ -178,13 +185,12 @@ fn init_handlers(channel_id: u64, redis: &storage::Redis) -> MessageHandlers {
         joker,
         wdyt,
         img2msg,
+        m: std::marker::PhantomData,
     }
 }
 
-fn init_messages() -> Arc<messages::MessageDump> {
-    let msg_name_env = std::env::var("MSG_NAMES").unwrap_or_default();
-    let msg_names: HashSet<&str> = msg_name_env.split(',').map(|n| n.trim()).collect();
-
+fn init_messages(conf: &config::Config) -> Arc<messages::MessageDump> {
+    let msg_names: HashSet<&str> = conf.user_matcher.short_names();
     let messages = messages::MessageDump::from_file("messages.html", &msg_names);
     let message_authors = messages
         .authors

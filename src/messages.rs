@@ -24,6 +24,8 @@ pub struct MessageDump {
 impl MessageDump {
     pub fn from_file(input_file: &str, names: &HashSet<&str>) -> Self {
         let mut authors: Vec<Author> = Vec::new();
+        let mut last_full_name: String = String::new();
+
         let texts = fold_html(
             input_file,
             Vec::new(),
@@ -41,29 +43,25 @@ impl MessageDump {
                         EventResult::Consumed(msgs)
                     }
                 },
-                MessageEvent::FullNameExtracted(full_name) if !names.contains(full_name) => {
+                MessageEvent::FullNameExtracted(full_name) => {
+                    last_full_name.clear();
+                    last_full_name.push_str(full_name);
+                    EventResult::Consumed(msgs)
+                }
+                MessageEvent::ShortNameExtracted(short_name) if !names.contains(short_name) => {
                     EventResult::SkipMessage(msgs)
                 }
-                MessageEvent::FullNameExtracted(full_name) => {
+                MessageEvent::ShortNameExtracted(short_name) => {
                     msgs.last_mut().unwrap().author_idx = authors
                         .iter()
-                        .enumerate()
-                        .find(|(_, a)| a.full_name == full_name)
-                        .map(|(i, _)| i)
+                        .position(|a| a.short_name == short_name)
                         .unwrap_or_else(|| {
                             authors.push(Author {
-                                full_name: full_name.to_owned(),
-                                short_name: String::new(),
+                                full_name: last_full_name.to_owned(),
+                                short_name: short_name.to_owned(),
                             });
                             authors.len() - 1
                         });
-                    EventResult::Consumed(msgs)
-                }
-                MessageEvent::ShortNameExtracted(short_name) => {
-                    let author_idx = msgs.last_mut().unwrap().author_idx;
-                    if authors[author_idx].short_name.is_empty() {
-                        authors[author_idx].short_name.push_str(short_name);
-                    }
                     EventResult::Consumed(msgs)
                 }
                 MessageEvent::BodyPartExtracted(body) => {

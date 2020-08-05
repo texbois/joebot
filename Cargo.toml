@@ -18,6 +18,7 @@ alcs = "0.1"
 artano = "0.3"
 regex = "1"
 rust-stemmers = "1.2"
+lazy_static = "1"
 
 [dependencies.serenity]
 version = "0.8"

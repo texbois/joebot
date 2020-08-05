@@ -1,4 +1,5 @@
 use crate::{
+    config::UserMatcher,
     messages::{self, MessageDump},
     storage, JoeResult,
 };
@@ -29,8 +30,9 @@ const LOSE_MESSAGES: [&str; 4] = [
     "Удачи в другой раз, амигос.",
 ];
 
-pub struct Taki {
+pub struct Taki<'a> {
     messages: Arc<MessageDump>,
+    user_matcher: &'a UserMatcher,
     storage: storage::ChatGameStorage,
     ongoing: Option<OngoingGame>,
     rng: SmallRng,
@@ -41,10 +43,16 @@ struct OngoingGame {
     score: i32,
 }
 
-impl Taki {
-    pub fn new(messages: Arc<MessageDump>, chat_id: u64, redis: &storage::Redis) -> Self {
+impl<'a> Taki<'a> {
+    pub fn new(
+        messages: Arc<MessageDump>,
+        user_matcher: &'a UserMatcher,
+        chat_id: u64,
+        redis: &storage::Redis,
+    ) -> Self {
         Self {
             messages,
+            user_matcher,
             storage: redis.get_game_storage("taki", chat_id),
             ongoing: None,
             rng: SmallRng::from_entropy(),
@@ -113,13 +121,18 @@ impl Taki {
                 Ok(true)
             }
             (_, Some(ref mut game)) => {
-                let text_lower = msg.content.to_lowercase();
+                let text = msg.content.to_lowercase();
+                let suspect_name = &game.suspect.short_name;
 
-                if text_lower == game.suspect.short_name.to_lowercase()
-                    || text_lower == game.suspect.full_name.to_lowercase()
-                {
+                if self.user_matcher.matches_short_name(&text, suspect_name) {
                     let title = WIN_MESSAGES.choose(&mut self.rng).unwrap();
-                    let resp = format!("{} +{}", msg.author.name, game.score);
+                    let resp = format!(
+                        "Это был _{}_ под псевдонимом `{}`\n\n{} получает +{}",
+                        game.suspect.full_name,
+                        game.suspect.short_name,
+                        msg.author.name,
+                        game.score
+                    );
 
                     self.storage
                         .incr_in_set("scores", msg.author.id.0, game.score)?;
@@ -140,7 +153,7 @@ impl Taki {
                     if game.score == 0 {
                         let title = LOSE_MESSAGES.choose(&mut self.rng).unwrap();
                         let resp = format!(
-                            "Это был {} ({})",
+                            "Это был _{}_ под псевдонимом `{}`",
                             game.suspect.full_name, game.suspect.short_name
                         );
 
