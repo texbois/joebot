@@ -7,18 +7,17 @@ use rand::{rngs::SmallRng, seq::SliceRandom, SeedableRng};
 use regex::Regex;
 use serenity::{http::AttachmentType, model::prelude::*, prelude::*};
 use std::borrow::Cow;
-use std::sync::Arc;
 
-pub struct Joker {
-    messages: Arc<MessageDump>,
+pub struct Joker<'a> {
+    messages: &'a MessageDump,
     font: Font<'static>,
     trigger_regex: Regex,
     rng: SmallRng,
     source_images: Vec<Vec<u8>>,
 }
 
-impl Joker {
-    pub fn new(messages: Arc<MessageDump>) -> JoeResult<Self> {
+impl<'a> Joker<'a> {
+    pub fn new(messages: &'a MessageDump) -> JoeResult<Self> {
         let font = Font::try_from_vec(std::fs::read("joker/font.ttf")?).unwrap();
         let trigger_regex = Regex::new("(?i)(?:джокер)[а-я ]*([+]+)?").unwrap();
         let rng = SmallRng::from_entropy();

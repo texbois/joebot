@@ -4,7 +4,6 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::error::Error;
 use std::fs::File;
-use std::sync::Arc;
 
 pub type JoeResult<T> = Result<T, Box<dyn Error>>;
 
@@ -21,16 +20,31 @@ lazy_static! {
         let conf_str = std::fs::read_to_string("config.json").expect("Cannot read config.json");
         serde_json::from_str(&conf_str).unwrap()
     };
+    static ref MESSAGE_DUMP: messages::MessageDump = {
+        let msg_names: HashSet<&str> = CONFIG.user_matcher.short_names();
+        let messages = messages::MessageDump::from_file("messages.html", &msg_names);
+        let message_authors = messages
+            .authors
+            .iter()
+            .map(|a| a.full_name.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        println!(
+            "{} messages from the following authors: {}\n",
+            messages.texts.len(),
+            message_authors
+        );
+        messages
+    };
 }
 
 struct MessageHandlers<'a> {
     taki: commands::Taki<'a>,
     chain: commands::Chain,
     poll: commands::Poll,
-    joker: commands::Joker,
-    wdyt: commands::Wdyt,
-    img2msg: commands::Img2msg,
-    m: std::marker::PhantomData<&'a ()>,
+    joker: commands::Joker<'a>,
+    wdyt: commands::Wdyt<'a>,
+    img2msg: commands::Img2msg<'a>,
 }
 
 struct Handler<'a> {
@@ -167,16 +181,15 @@ fn main() {
 }
 
 fn init_handlers<'a>(conf: &'a config::Config, redis: &storage::Redis) -> MessageHandlers<'a> {
-    let messages = init_messages(conf);
     let chain_data: joebot_markov_chain::MarkovChain =
         bincode::deserialize_from(File::open("chain.bin").unwrap()).unwrap();
 
-    let taki = commands::Taki::new(messages.clone(), &conf.user_matcher, conf.channel_id, redis);
+    let taki = commands::Taki::new(&MESSAGE_DUMP, &conf.user_matcher, conf.channel_id, redis);
     let chain = commands::Chain::new(chain_data);
     let poll = commands::Poll::new();
-    let joker = commands::Joker::new(messages.clone()).unwrap();
-    let wdyt = commands::Wdyt::new(messages.clone()).unwrap();
-    let img2msg = commands::Img2msg::new(messages.clone()).unwrap();
+    let joker = commands::Joker::new(&MESSAGE_DUMP).unwrap();
+    let wdyt = commands::Wdyt::new(&MESSAGE_DUMP).unwrap();
+    let img2msg = commands::Img2msg::new(&MESSAGE_DUMP).unwrap();
 
     MessageHandlers {
         taki,
@@ -185,23 +198,5 @@ fn init_handlers<'a>(conf: &'a config::Config, redis: &storage::Redis) -> Messag
         joker,
         wdyt,
         img2msg,
-        m: std::marker::PhantomData,
     }
-}
-
-fn init_messages(conf: &config::Config) -> Arc<messages::MessageDump> {
-    let msg_names: HashSet<&str> = conf.user_matcher.short_names();
-    let messages = messages::MessageDump::from_file("messages.html", &msg_names);
-    let message_authors = messages
-        .authors
-        .iter()
-        .map(|a| a.full_name.as_str())
-        .collect::<Vec<_>>()
-        .join(", ");
-    println!(
-        "{} messages from the following authors: {}\n",
-        messages.texts.len(),
-        message_authors
-    );
-    Arc::new(messages)
 }

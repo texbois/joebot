@@ -4,18 +4,17 @@ use regex::Regex;
 use rust_stemmers::Stemmer;
 use serenity::{model::prelude::*, prelude::*};
 use std::borrow::Cow;
-use std::sync::Arc;
 
-pub struct Wdyt {
-    messages: Arc<MessageDump>,
+pub struct Wdyt<'a> {
+    messages: &'a MessageDump,
     trigger_regex: Regex,
     en_stemmer: Stemmer,
     ru_stemmer: Stemmer,
     rng: SmallRng,
 }
 
-impl Wdyt {
-    pub fn new(messages: Arc<MessageDump>) -> JoeResult<Self> {
+impl<'a> Wdyt<'a> {
+    pub fn new(messages: &'a MessageDump) -> JoeResult<Self> {
         let trigger_regex = Regex::new(r"(?i)(?:что (?:ты )?думаешь (?:об?|про|насчет)|как тебе|(?:тво[её]|ваше) мнение об?|как (?:ты )?относишься ко?)\s+(.+)").unwrap();
         let en_stemmer = Stemmer::create(rust_stemmers::Algorithm::English);
         let ru_stemmer = Stemmer::create(rust_stemmers::Algorithm::Russian);

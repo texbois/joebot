@@ -6,7 +6,6 @@ use crate::{
 use rand::{rngs::SmallRng, seq::SliceRandom, SeedableRng};
 use serenity::{model::prelude::*, prelude::*};
 use std::fmt::Write;
-use std::sync::Arc;
 
 const INIT_SCORE: i32 = 5;
 const MESSAGES_SHOWN: usize = 3;
@@ -31,7 +30,7 @@ const LOSE_MESSAGES: [&str; 4] = [
 ];
 
 pub struct Taki<'a> {
-    messages: Arc<MessageDump>,
+    messages: &'a MessageDump,
     user_matcher: &'a UserMatcher,
     storage: storage::ChatGameStorage,
     ongoing: Option<OngoingGame>,
@@ -45,7 +44,7 @@ struct OngoingGame {
 
 impl<'a> Taki<'a> {
     pub fn new(
-        messages: Arc<MessageDump>,
+        messages: &'a MessageDump,
         user_matcher: &'a UserMatcher,
         chat_id: u64,
         redis: &storage::Redis,

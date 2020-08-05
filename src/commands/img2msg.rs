@@ -6,16 +6,15 @@ use rand::{rngs::SmallRng, SeedableRng};
 use serenity::{model::prelude::*, prelude::*};
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
-use std::sync::Arc;
 
-pub struct Img2msg {
-    messages: Arc<MessageDump>,
+pub struct Img2msg<'a> {
+    messages: &'a MessageDump,
     rng: SmallRng,
     classifier: UnixStream,
 }
 
-impl Img2msg {
-    pub fn new(messages: Arc<MessageDump>) -> JoeResult<Self> {
+impl<'a> Img2msg<'a> {
+    pub fn new(messages: &'a MessageDump) -> JoeResult<Self> {
         let classifier = UnixStream::connect("imclassif.sock")?;
 
         Ok(Self {
