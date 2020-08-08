@@ -1,11 +1,14 @@
 use crate::{
-    config::UserMatcher,
-    messages::{self, MessageDump},
+    config::{Config, UserMatcher},
+    messages::{Author, MessageDump},
     storage, JoeResult,
 };
 use rand::{rngs::SmallRng, seq::SliceRandom, SeedableRng};
 use serenity::{model::prelude::*, prelude::*};
 use std::fmt::Write;
+
+mod picker;
+use picker::SuspectPicker;
 
 const INIT_SCORE: i32 = 5;
 const MESSAGES_SHOWN: usize = 3;
@@ -30,29 +33,26 @@ const LOSE_MESSAGES: [&str; 4] = [
 ];
 
 pub struct Taki<'a> {
-    messages: &'a MessageDump,
-    user_matcher: &'a UserMatcher,
+    suspect_picker: SuspectPicker<'a>,
+    suspect_matcher: &'a UserMatcher,
     storage: storage::ChatGameStorage,
-    ongoing: Option<OngoingGame>,
+    ongoing: Option<OngoingGame<'a>>,
     rng: SmallRng,
 }
 
-struct OngoingGame {
-    suspect: messages::Author,
+struct OngoingGame<'a> {
+    suspect: &'a Author,
     score: i32,
 }
 
 impl<'a> Taki<'a> {
-    pub fn new(
-        messages: &'a MessageDump,
-        user_matcher: &'a UserMatcher,
-        chat_id: u64,
-        redis: &storage::Redis,
-    ) -> Self {
+    pub fn new(messages: &'a MessageDump, conf: &'a Config, redis: &storage::Redis) -> Self {
+        let suspect_picker = SuspectPicker::new(messages, &conf.user_penalties);
+
         Self {
-            messages,
-            user_matcher,
-            storage: redis.get_game_storage("taki", chat_id),
+            suspect_picker,
+            suspect_matcher: &conf.user_matcher,
+            storage: redis.get_game_storage("taki", conf.channel_id),
             ongoing: None,
             rng: SmallRng::from_entropy(),
         }
@@ -63,10 +63,12 @@ impl<'a> super::Command for Taki<'a> {
     fn handle_message(&mut self, ctx: &Context, msg: &Message) -> JoeResult<bool> {
         match (msg.content.as_str(), &mut self.ongoing) {
             ("!takistart", None) => {
-                let (suspect, messages) = pick_random_suspect(&self.messages, &mut self.rng);
+                let (suspect, messages) = self
+                    .suspect_picker
+                    .random_suspect(&mut self.rng, MESSAGES_SHOWN);
 
                 self.ongoing = Some(OngoingGame {
-                    suspect: suspect.clone(),
+                    suspect,
                     score: INIT_SCORE,
                 });
                 let (start_prefix, start_suffix) = START_MESSAGES.choose(&mut self.rng).unwrap();
@@ -108,7 +110,20 @@ impl<'a> super::Command for Taki<'a> {
                 Ok(true)
             }
             ("!takisuspects", _) => {
-                let suspects = list_suspects(&self.messages).join("\n");
+                let suspects = self
+                    .suspect_picker
+                    .list_suspects()
+                    .enumerate()
+                    .map(|(idx, author)| {
+                        format!(
+                            "{}) _{}_ под псевдонимом `{}`",
+                            idx + 1,
+                            author.full_name,
+                            author.short_name,
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
                 msg.channel_id.send_message(&ctx.http, |m| {
                     m.embed(|e| {
                         e.color(crate::EMBED_COLOR);
@@ -125,7 +140,7 @@ impl<'a> super::Command for Taki<'a> {
                 let text = msg.content.to_lowercase();
                 let suspect_name = &game.suspect.short_name;
 
-                if self.user_matcher.matches_short_name(&text, suspect_name) {
+                if self.suspect_matcher.matches_short_name(&text, suspect_name) {
                     let title = WIN_MESSAGES.choose(&mut self.rng).unwrap();
                     let resp = format!(
                         "Это был _{}_ под псевдонимом `{}`\n\n{} получает +{}",
@@ -176,39 +191,4 @@ impl<'a> super::Command for Taki<'a> {
             _ => Ok(false),
         }
     }
-}
-
-fn list_suspects(messages: &MessageDump) -> Vec<String> {
-    messages
-        .authors
-        .iter()
-        .enumerate()
-        .map(|(idx, author)| {
-            format!(
-                "{}) _{}_ под псевдонимом `{}`",
-                idx + 1,
-                author.full_name,
-                author.short_name,
-            )
-        })
-        .collect()
-}
-
-fn pick_random_suspect<'a>(
-    messages: &'a MessageDump,
-    rng: &mut SmallRng,
-) -> (&'a messages::Author, Vec<&'a str>) {
-    let enum_authors = messages.authors.iter().enumerate().collect::<Vec<_>>();
-    let (author_idx, author) = enum_authors.choose(rng).unwrap();
-    let messages_by_author = messages
-        .texts
-        .iter()
-        .filter(|m| m.author_idx == *author_idx)
-        .collect::<Vec<_>>();
-    let sample_messages = messages_by_author
-        .choose_multiple(rng, MESSAGES_SHOWN)
-        .map(|m| m.text.as_ref())
-        .collect::<Vec<_>>();
-
-    (author, sample_messages)
 }

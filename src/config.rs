@@ -12,6 +12,40 @@ use std::{
 pub struct Config {
     pub channel_id: u64,
     pub user_matcher: UserMatcher,
+    pub user_penalties: UserPenalties,
+}
+
+#[derive(Deserialize)]
+pub struct UserPenalties(HashMap<String, usize>);
+
+impl UserPenalties {
+    pub fn verify_penalty_cap(&self, cap: usize) {
+        for (user, penalty) in self.0.iter() {
+            if *penalty > cap {
+                panic!(
+                    "Error: {} has penalty set to {}, which is higher than the cap ({})",
+                    user, penalty, cap
+                );
+            }
+            if *penalty == cap {
+                println!(
+                    "Warning: {} has maximum penalty set. They won't be included in Taki games.",
+                    user
+                );
+            } else {
+                println!(
+                    "Penalty set for user {}: cap is {}, penalized is {}",
+                    user,
+                    cap,
+                    cap - penalty
+                );
+            }
+        }
+    }
+
+    pub fn by_short_name(&self, short_name: &str) -> usize {
+        self.0.get(short_name).copied().unwrap_or(0)
+    }
 }
 
 pub struct UserMatcher(HashMap<String, Regex>);

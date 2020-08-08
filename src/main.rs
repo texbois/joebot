@@ -155,7 +155,7 @@ fn init_dispatcher<'a>(
     let chain_data: joebot_markov_chain::MarkovChain =
         bincode::deserialize_from(File::open("chain.bin").unwrap()).unwrap();
 
-    let taki = commands::Taki::new(&MESSAGE_DUMP, &conf.user_matcher, conf.channel_id, redis);
+    let taki = commands::Taki::new(&MESSAGE_DUMP, &conf, redis);
     let chain = commands::Chain::new(chain_data);
     let poll = commands::Poll::new();
     let wdyt = commands::Wdyt::new(&MESSAGE_DUMP).unwrap();

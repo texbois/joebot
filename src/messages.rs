@@ -2,7 +2,7 @@ use rand::{seq::SliceRandom, Rng};
 use std::collections::{HashMap, HashSet};
 use vkopt_message_parser::reader::{fold_html, EventResult, MessageEvent};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Author {
     pub short_name: String,
     pub full_name: String,
