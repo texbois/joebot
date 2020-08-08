@@ -2,6 +2,8 @@ use rand::{seq::SliceRandom, Rng};
 use std::collections::{HashMap, HashSet};
 use vkopt_message_parser::reader::{fold_html, EventResult, MessageEvent};
 
+const DISCORD_TEXT_LIMIT: usize = 2000;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Author {
     pub short_name: String,
@@ -31,7 +33,11 @@ impl MessageDump {
             Vec::new(),
             |mut msgs: Vec<Message>, event| match event {
                 MessageEvent::Start(_) => match msgs.last_mut() {
-                    Some(msg) if msg.text.is_empty() => {
+                    Some(msg)
+                        if msg.text.trim().is_empty()
+                            || msg.text.chars().count() >= DISCORD_TEXT_LIMIT =>
+                    {
+                        msg.text.clear();
                         msg.author_idx = 0;
                         EventResult::Consumed(msgs)
                     }
@@ -136,10 +142,6 @@ fn build_word_stem_to_text_idx(texts: &[Message]) -> HashMap<String, Vec<u32>> {
     let ru_stemmer = rust_stemmers::Stemmer::create(rust_stemmers::Algorithm::Russian);
 
     for (idx, msg) in texts.iter().enumerate() {
-        if msg.text.chars().count() >= 2000 {
-            /* Exceeds the limit set by Discord */
-            continue;
-        }
         for word in msg.text.split_ascii_whitespace() {
             let stemmer = if word.is_ascii() {
                 &en_stemmer
