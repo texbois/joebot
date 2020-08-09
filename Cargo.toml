@@ -1,5 +1,5 @@
 [workspace]
-members = ["joebot", "joebot-markov-chain"]
+members = ["joebot-markov-chain", "joebot"]
 
 [profile.release]
 opt-level = 2

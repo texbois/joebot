@@ -1,4 +1,5 @@
 config.json
 messages*.html
 chain.bin
+chain_sources.json
 /joker
