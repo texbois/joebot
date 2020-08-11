@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 joebot-markov-chain = { path = "../joebot-markov-chain" }
-vkopt-message-parser = { git = "https://github.com/texbois/vkopt-message-parser" }
+vkopt-message-parser = "0.3"
 rand = { version = "0.7", features = ["small_rng"] }
 redis = "0.17"
 serde = "1.0"
