@@ -19,7 +19,7 @@ pub struct Joker<'a> {
 impl<'a> Joker<'a> {
     pub fn new(messages: &'a MessageDump) -> JoeResult<Self> {
         let trigger_regex =
-            Regex::new(r"(?:джокер)\s*(?P<len>[+]+)?(?:\s*про\s+(?:(?P<prompt_top>.+)\s+и\s+(?P<prompt_bottom>.+)|(?P<prompt>.+)))?").unwrap();
+            Regex::new(r"(?i)(?:джокер)\s*(?P<len>[+]+)?(?:\s*про\s+(?:(?P<prompt_top>.+)\s+и\s+(?P<prompt_bottom>.+)|(?P<prompt>.+)))?").unwrap();
         let rng = SmallRng::from_entropy();
         let templates = template::load_jpg_templates("joker")?;
 
