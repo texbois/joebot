@@ -2,7 +2,7 @@ use crate::{
     messages::{Author, MessageDump},
     JoeResult,
 };
-use rand::{rngs::SmallRng, SeedableRng};
+use rand::{rngs::SmallRng, SeedableRng, seq::SliceRandom};
 use serenity::{model::prelude::*, prelude::*};
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
@@ -31,7 +31,8 @@ impl<'a> super::Command for Img2msg<'a> {
             Some(a) if a.width.is_some() => {
                 let data = a.download()?;
 
-                self.classifier.write_all(&(data.len() as u32).to_be_bytes())?;
+                self.classifier
+                    .write_all(&(data.len() as u32).to_be_bytes())?;
                 self.classifier.write_all(&data)?;
 
                 let mut result_size_bytes = [0u8; 4];
@@ -46,8 +47,6 @@ impl<'a> super::Command for Img2msg<'a> {
                     .split(';')
                     .map(|ss| ss.split(',').collect::<Vec<_>>())
                     .collect::<Vec<_>>();
-
-                println!("{:?}", tiered_kw_stems);
 
                 if let Some((author, text)) =
                     pick_text(&self.messages, &mut self.rng, &tiered_kw_stems)
@@ -84,8 +83,10 @@ fn pick_text<'a>(
     rng: &mut SmallRng,
     keyword_stems_by_tier: &[Vec<&str>],
 ) -> Option<(&'a Author, &'a str)> {
-    keyword_stems_by_tier
-        .iter()
-        .find_map(|stems| messages.random_message_with_any_stem(stems, rng))
-        .map(|msg| (&messages.authors[msg.author_idx], msg.text.as_str()))
+    for kws in keyword_stems_by_tier {
+        if let Some(m) = messages.containing_any_words(&&kws[..]).choose(rng) {
+            return Some((&messages.authors[m.author_idx], &m.text));
+        }
+    }
+    None
 }

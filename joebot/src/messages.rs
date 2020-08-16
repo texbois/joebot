@@ -1,4 +1,4 @@
-use rand::{seq::SliceRandom, Rng};
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use vkopt_message_parser::reader::{fold_html, EventResult, MessageEvent};
 
@@ -21,6 +21,7 @@ pub struct MessageDump {
     pub authors: Vec<Author>,
     pub texts: Vec<Message>,
     word_stem_to_text_idx: HashMap<String, Vec<u32>>,
+    stemmer: Stemmer,
 }
 
 impl MessageDump {
@@ -79,37 +80,30 @@ impl MessageDump {
         )
         .unwrap();
 
-        let word_stem_to_text_idx = build_word_stem_to_text_idx(&texts);
+        let stemmer = Stemmer::new();
+        let word_stem_to_text_idx = build_word_stem_to_text_idx(&texts, &stemmer);
 
         Self {
             authors,
             texts,
             word_stem_to_text_idx,
+            stemmer,
         }
     }
 
-    pub fn random_message_with_any_stem<'s, S: AsRef<str>, R: Rng>(
-        &'s self,
-        stems: &[S],
-        rng: &mut R,
-    ) -> Option<&'s Message> {
-        let text_indexes = stems
-            .iter()
-            .filter_map(|s| self.word_stem_to_text_idx.get(s.as_ref()))
+    pub fn containing_any_words<'p, P: Prompt>(&self, prompt: &'p P) -> Vec<&Message> {
+        prompt
+            .stems(&self.stemmer)
+            .into_iter()
+            .filter_map(move |s| self.word_stem_to_text_idx.get(s.as_ref()))
             .flatten()
-            .copied()
-            .collect::<Vec<u32>>();
-        text_indexes
-            .choose(rng)
-            .map(|&idx| &self.texts[idx as usize])
+            .map(|idx| &self.texts[*idx as usize])
+            .collect()
     }
 
-    pub fn random_message_with_all_stems<'s, S: AsRef<str>, R: Rng>(
-        &'s self,
-        stems: &[S],
-        rng: &mut R,
-    ) -> Option<&'s Message> {
-        let stem_indexes = stems
+    pub fn containing_all_words<'p, P: Prompt>(&'p self, prompt: &'p P) -> Vec<&Message> {
+        let stem_indexes = prompt
+            .stems(&self.stemmer)
             .iter()
             .filter_map(|s| {
                 self.word_stem_to_text_idx
@@ -119,35 +113,24 @@ impl MessageDump {
             .collect::<Vec<HashSet<u32>>>();
 
         if stem_indexes.is_empty() {
-            return None;
+            return vec![];
         }
 
-        let mut indexes_with_all_stems = Vec::new();
+        let mut messages_with_all_stems = Vec::new();
         for idx in &stem_indexes[0] {
             if stem_indexes.iter().all(|s| s.contains(&idx)) {
-                indexes_with_all_stems.push(*idx);
+                messages_with_all_stems.push(&self.texts[*idx as usize]);
             }
         }
-
-        indexes_with_all_stems
-            .choose(rng)
-            .map(|&idx| &self.texts[idx as usize])
+        messages_with_all_stems
     }
 }
 
-fn build_word_stem_to_text_idx(texts: &[Message]) -> HashMap<String, Vec<u32>> {
+fn build_word_stem_to_text_idx(texts: &[Message], stemmer: &Stemmer) -> HashMap<String, Vec<u32>> {
     let mut map: HashMap<String, Vec<u32>> = HashMap::new();
-
-    let en_stemmer = rust_stemmers::Stemmer::create(rust_stemmers::Algorithm::English);
-    let ru_stemmer = rust_stemmers::Stemmer::create(rust_stemmers::Algorithm::Russian);
 
     for (idx, msg) in texts.iter().enumerate() {
         for word in msg.text.split_ascii_whitespace() {
-            let stemmer = if word.is_ascii() {
-                &en_stemmer
-            } else {
-                &ru_stemmer
-            };
             let stem: String = stemmer.stem(word).into();
 
             match map.get_mut(&stem) {
@@ -162,4 +145,53 @@ fn build_word_stem_to_text_idx(texts: &[Message]) -> HashMap<String, Vec<u32>> {
     }
 
     map
+}
+
+pub struct Stemmer {
+    ru_stemmer: rust_stemmers::Stemmer,
+    en_stemmer: rust_stemmers::Stemmer,
+}
+
+impl std::fmt::Debug for Stemmer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Stemmer")
+    }
+}
+
+impl Stemmer {
+    fn new() -> Self {
+        let ru_stemmer = rust_stemmers::Stemmer::create(rust_stemmers::Algorithm::Russian);
+        let en_stemmer = rust_stemmers::Stemmer::create(rust_stemmers::Algorithm::English);
+        Self {
+            ru_stemmer,
+            en_stemmer,
+        }
+    }
+
+    pub fn stem<'a>(&self, input: &'a str) -> Cow<'a, str> {
+        if input.is_ascii() {
+            self.en_stemmer.stem(&input)
+        } else {
+            self.ru_stemmer.stem(&input)
+        }
+    }
+}
+
+pub trait Prompt {
+    fn stems<'a>(&'a self, stemmer: &Stemmer) -> Vec<Cow<'a, str>>;
+}
+
+impl Prompt for &str {
+    fn stems(&self, stemmer: &Stemmer) -> Vec<Cow<str>> {
+        self.split(' ')
+            .map(|w| w.to_lowercase())
+            .map(move |w| Cow::Owned(stemmer.stem(w.as_str()).into_owned()))
+            .collect::<Vec<_>>()
+    }
+}
+
+impl Prompt for &[&str] {
+    fn stems(&self, _: &Stemmer) -> Vec<Cow<str>> {
+        self.iter().map(|s| Cow::Borrowed(*s)).collect()
+    }
 }
