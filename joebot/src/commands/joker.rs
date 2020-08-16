@@ -18,7 +18,8 @@ pub struct Joker<'a> {
 
 impl<'a> Joker<'a> {
     pub fn new(messages: &'a MessageDump) -> JoeResult<Self> {
-        let trigger_regex = Regex::new("(?i)(?:джокер)[а-я ]*([+]+)?").unwrap();
+        let trigger_regex =
+            Regex::new(r"(?:джокер)\s*(?P<len>[+]+)?(?:\s*про\s+(?:(?P<prompt_top>.+)\s+и\s+(?P<prompt_bottom>.+)|(?P<prompt>.+)))?").unwrap();
         let rng = SmallRng::from_entropy();
         let templates = template::load_jpg_templates("joker")?;
 
@@ -34,15 +35,26 @@ impl<'a> Joker<'a> {
 impl<'a> super::Command for Joker<'a> {
     fn handle_message(&mut self, ctx: &Context, msg: &Message) -> JoeResult<bool> {
         if let Some(captures) = self.trigger_regex.captures(&msg.content) {
+            let time_started = std::time::Instant::now();
+
             let min_words = captures
-                .get(1)
+                .name("len")
                 .map(|pluses| pluses.as_str().len())
                 .unwrap_or(0);
 
-            let time_started = std::time::Instant::now();
-            if let Some(((top_author, top_text), (bottom_author, bottom_text))) =
-                pick_top_bottom(&self.messages, &mut self.rng, min_words)
-            {
+            let top_prompt = captures
+                .name("prompt")
+                .or_else(|| captures.name("prompt_top"))
+                .map(|m| m.as_str());
+            let bottom_prompt = captures.name("prompt_bottom").map(|m| m.as_str());
+
+            let picks = pick_text(&self.messages, &mut self.rng, min_words, top_prompt).and_then(
+                |top_pick| {
+                    pick_text(&self.messages, &mut self.rng, min_words, bottom_prompt)
+                        .map(|bottom_pick| (top_pick, bottom_pick))
+                },
+            );
+            if let Some(((top_author, top_text), (bottom_author, bottom_text))) = picks {
                 let time_texts = std::time::Instant::now();
 
                 let template = self.templates.choose(&mut self.rng).unwrap();
@@ -82,11 +94,7 @@ impl<'a> super::Command for Joker<'a> {
                     (time_message - time_render).as_millis()
                 );
             } else {
-                let resp = std::iter::repeat("society")
-                    .take(min_words)
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                msg.channel_id.say(&ctx.http, resp)?;
+                msg.channel_id.say(&ctx.http, "Наивное общество о таком еще не слыхало...")?;
             }
 
             Ok(true)
@@ -96,28 +104,36 @@ impl<'a> super::Command for Joker<'a> {
     }
 }
 
-fn pick_top_bottom<'a>(
+fn pick_text<'a>(
     messages: &'a MessageDump,
     rng: &mut SmallRng,
     min_words: usize,
-) -> Option<((&'a Author, &'a str), (&'a Author, &'a str))> {
+    str_prompt: Option<&'a str>,
+) -> Option<(&'a Author, &'a str)> {
     let max_len = std::cmp::max(200, 50 + 8 * min_words);
+    let len_filter = |m: &&crate::messages::Message| {
+        if min_words != 0 {
+            if m.text.matches(' ').count() < (min_words - 1) {
+                return false;
+            }
+        }
+        if m.text.chars().count() >= max_len {
+            return false;
+        }
+        true
+    };
 
-    let texts = messages
-        .texts
-        .iter()
-        .filter(|m| {
-            (min_words == 0 || m.text.matches(' ').count() >= (min_words - 1))
-                && m.text.chars().count() < max_len
-        })
-        .collect::<Vec<_>>();
+    let potential_picks = if let Some(ref p) = str_prompt {
+        messages
+            .containing_any_words(p)
+            .into_iter()
+            .filter(len_filter)
+            .collect::<Vec<_>>()
+    } else {
+        messages.texts.iter().filter(len_filter).collect::<Vec<_>>()
+    };
 
-    let top = texts
+    potential_picks
         .choose(rng)
-        .map(|msg| (&messages.authors[msg.author_idx], msg.text.as_str()))?;
-    let bottom = texts
-        .choose(rng)
-        .map(|msg| (&messages.authors[msg.author_idx], msg.text.as_str()))?;
-
-    Some((top, bottom))
+        .map(|msg| (&messages.authors[msg.author_idx], msg.text.as_str()))
 }

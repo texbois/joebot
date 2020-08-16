@@ -11,7 +11,7 @@ pub struct Wdyt<'a> {
 
 impl<'a> Wdyt<'a> {
     pub fn new(messages: &'a MessageDump) -> JoeResult<Self> {
-        let trigger_regex = Regex::new(r"(?i)(?:что (?:ты )?думаешь (?:об?|про|насчет)|как тебе|(?:тво[её]|ваше) мнение об?|как (?:ты )?относишься ко?)\s+(?<prompt>.+)").unwrap();
+        let trigger_regex = Regex::new(r"(?i)(?:что (?:ты )?думаешь (?:об?|про|насчет)|как тебе|(?:тво[её]|ваше) мнение об?|как (?:ты )?относишься ко?)\s+(?P<prompt>.+)").unwrap();
         let rng = SmallRng::from_entropy();
 
         Ok(Self {
