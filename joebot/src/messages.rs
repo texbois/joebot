@@ -130,9 +130,7 @@ fn build_word_stem_to_text_idx(texts: &[Message], stemmer: &Stemmer) -> HashMap<
     let mut map: HashMap<String, Vec<u32>> = HashMap::new();
 
     for (idx, msg) in texts.iter().enumerate() {
-        for word in msg.text.split_ascii_whitespace() {
-            let stem: String = stemmer.stem(word).into();
-
+        for stem in split_text_into_stems(&msg.text, stemmer) {
             match map.get_mut(&stem) {
                 Some(indexes) => {
                     indexes.push(idx as u32);
@@ -183,9 +181,8 @@ pub trait Prompt {
 
 impl Prompt for &str {
     fn stems(&self, stemmer: &Stemmer) -> Vec<Cow<str>> {
-        self.split(' ')
-            .map(|w| w.to_lowercase())
-            .map(move |w| Cow::Owned(stemmer.stem(w.as_str()).into_owned()))
+        split_text_into_stems(self, stemmer)
+            .map(move |w| Cow::Owned(w))
             .collect::<Vec<_>>()
     }
 }
@@ -194,4 +191,19 @@ impl Prompt for &[&str] {
     fn stems(&self, _: &Stemmer) -> Vec<Cow<str>> {
         self.iter().map(|s| Cow::Borrowed(*s)).collect()
     }
+}
+
+fn split_text_into_stems<'t>(
+    text: &'t str,
+    stemmer: &'t Stemmer,
+) -> impl Iterator<Item = String> + 't {
+    text.split(&[' ', '\n', '.', '…', ',', '!', '?', '(', ')', '[', ']', '/', '|', '@', '"', ':', '-', '+'][..])
+        .filter_map(move |w| {
+            let word = w.trim();
+            if word.is_empty() {
+                None
+            } else {
+                Some(stemmer.stem(&w.to_lowercase()).into_owned())
+            }
+        })
 }
