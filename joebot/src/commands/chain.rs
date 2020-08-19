@@ -1,4 +1,4 @@
-use crate::{JoeResult, utils::split_command_rest};
+use crate::{utils::split_command_rest, JoeResult};
 use joebot_markov_chain::{ChainGenerate, Datestamp, MarkovChain, TextSource};
 use phf::phf_map;
 use rand::{rngs::SmallRng, SeedableRng};
@@ -70,7 +70,7 @@ fn do_mashup(command: &str, chain: &MarkovChain, rng: &mut SmallRng) -> String {
             .collect::<Vec<_>>()[..]
         {
             [date, names] => match DATE_RANGE_MAP.get(date.trim()) {
-                Some(range) => (names, Some(range)),
+                Some(range) => (names, Some(range.clone())),
                 _ => {
                     return format!(
                         "\u{274c} {}? Давно это было. Я помню только {}.",
@@ -89,9 +89,9 @@ fn do_mashup(command: &str, chain: &MarkovChain, rng: &mut SmallRng) -> String {
         (command, None)
     };
     match pick_sources(names_str, &chain.sources) {
-        Ok(sources) => match date_range {
-            Some(range) => chain.generate_in_date_range(rng, sources, *range, 15, 40),
-            None => chain.generate(rng, sources, 15, 40),
+        Ok(sources) => {
+            let selector = joebot_markov_chain::Selector { date_range };
+            chain.generate(rng, &sources, &selector, 15, 40)
         }
         .unwrap_or_else(|| String::from("\u{274c}")),
         Err(err) => err,
@@ -125,7 +125,7 @@ fn mashup_sources(chain: &MarkovChain, filter: &str) -> String {
 
 fn pick_sources<'s>(
     names_str: &str,
-    sources: &'s[TextSource],
+    sources: &'s [TextSource],
 ) -> Result<Vec<&'s TextSource>, String> {
     use alcs::FuzzyStrstr;
 

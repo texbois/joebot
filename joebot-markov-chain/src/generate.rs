@@ -1,67 +1,33 @@
-use crate::{ChainEntry, Datestamp, MarkovChain, TextSource};
+use crate::{ChainEntry, MarkovChain, Selector, TextSource};
 use indexmap::IndexSet;
-use rand::{seq::SliceRandom, Rng};
+use rand::Rng;
+use std::collections::HashSet;
+use std::borrow::Borrow;
 
-const MAX_TRIES: usize = 20;
+const MAX_TRIES: usize = 30;
 
 pub trait ChainGenerate {
-    fn generate<'a, R: Rng, I: IntoIterator<Item = &'a TextSource>>(
+    fn generate<R: Rng, S: Borrow<TextSource>>(
         &self,
         rng: &mut R,
-        sources: I,
-        min_words: usize,
-        max_words: usize,
-    ) -> Option<String>;
-
-    fn generate_in_date_range<'a, R: Rng, I: IntoIterator<Item = &'a TextSource>>(
-        &self,
-        rng: &mut R,
-        sources: I,
-        date_range: (Datestamp, Datestamp),
+        sources: &[S],
+        selector: &Selector,
         min_words: usize,
         max_words: usize,
     ) -> Option<String>;
 }
 
 impl ChainGenerate for MarkovChain {
-    fn generate<'a, R: Rng, I: IntoIterator<Item = &'a TextSource>>(
+    fn generate<R: Rng, S: Borrow<TextSource>>(
         &self,
         rng: &mut R,
-        sources: I,
+        sources: &[S],
+        selector: &Selector,
         min_words: usize,
         max_words: usize,
     ) -> Option<String> {
-        let edges = sources
-            .into_iter()
-            .flat_map(|s| &s.entries)
-            .collect::<Vec<_>>();
-        if !edges.is_empty() {
-            generate_sequence(rng, &edges, min_words, max_words)
-                .map(|s| seq_to_text(s, &self.words))
-        } else {
-            None
-        }
-    }
-
-    fn generate_in_date_range<'a, R: Rng, I: IntoIterator<Item = &'a TextSource>>(
-        &self,
-        rng: &mut R,
-        sources: I,
-        date_range: (Datestamp, Datestamp),
-        min_words: usize,
-        max_words: usize,
-    ) -> Option<String> {
-        let edges = sources
-            .into_iter()
-            .flat_map(|s| &s.entries)
-            .filter(|e| e.datestamp >= date_range.0 && e.datestamp <= date_range.1)
-            .collect::<Vec<_>>();
-        if !edges.is_empty() {
-            generate_sequence(rng, &edges, min_words, max_words)
-                .map(|s| seq_to_text(s, &self.words))
-        } else {
-            None
-        }
+        generate_sequence(rng, sources, selector, min_words, max_words)
+            .map(|s| seq_to_text(s, &self.words))
     }
 }
 
@@ -72,25 +38,33 @@ fn seq_to_text(seq: Vec<u32>, words: &IndexSet<String>) -> String {
         .join(" ")
 }
 
-fn generate_sequence<R: Rng>(
+fn generate_sequence<R: Rng, S: Borrow<TextSource>>(
     rng: &mut R,
-    edges: &[&ChainEntry],
+    sources: &[S],
+    selector: &Selector,
     min_words: usize,
     max_words: usize,
 ) -> Option<Vec<u32>> {
     let mut tries = 0;
     let mut generated: Vec<u32> = Vec::with_capacity(min_words as usize);
-    let starting_edges: Vec<&ChainEntry> = edges
-        .iter()
-        .filter(|e| e.prefix.is_starting())
-        .map(|e| *e)
+    let starting_edges: Vec<Vec<&ChainEntry>> = sources
+        .as_ref()
+        .into_iter()
+        .map(|es| {
+            es.borrow().entries
+                .iter()
+                .filter(|e| e.prefix.is_starting() && selector.filter_entry(e))
+                .collect::<Vec<&ChainEntry>>()
+        })
         .collect();
+
     while tries < MAX_TRIES {
-        let mut edge = starting_edges
-            .choose(rng)
-            .or_else(|| edges.choose(rng))
-            .unwrap();
+        let mut edge_sources: HashSet<usize> = HashSet::with_capacity(sources.as_ref().len());
+        let mut next_edges: Vec<Vec<&ChainEntry>>;
+
+        let (mut edge_source, mut edge) = pick_from_2d(&starting_edges, rng)?;
         loop {
+            edge_sources.insert(edge_source);
             generated.extend_from_slice(&edge.prefix.word_idxs());
             if generated.len() > max_words {
                 break;
@@ -99,12 +73,24 @@ fn generate_sequence<R: Rng>(
                 generated.push(edge.suffix.word_idx());
                 return Some(generated);
             }
-            let next_edges = edges
-                .iter()
-                .filter(|e| e.prefix.word_idxs()[0] == edge.suffix.word_idx())
+            next_edges = sources
+                .as_ref()
+                .into_iter()
+                .map(|es| {
+                    es.borrow().entries
+                        .iter()
+                        .filter(|e| {
+                            e.prefix.word_idxs()[0] == edge.suffix.word_idx()
+                                && selector.filter_entry(e)
+                        })
+                        .collect::<Vec<_>>()
+                })
                 .collect::<Vec<_>>();
-            edge = match next_edges.choose(rng) {
-                Some(e) => e,
+            match pick_from_2d(&next_edges, rng) {
+                Some((e_source, e)) => {
+                    edge_source = e_source;
+                    edge = e;
+                }
                 None => break,
             }
         }
@@ -112,6 +98,31 @@ fn generate_sequence<R: Rng>(
         tries += 1;
     }
     None
+}
+
+fn pick_from_2d<'a, T, S, R: Rng>(slices: &'a [S], rng: &mut R) -> Option<(usize, &'a T)>
+where
+    S: AsRef<[T]>,
+{
+    let total_len: usize = slices.iter().map(|s| s.as_ref().len()).sum();
+    if total_len == 0 {
+        None
+    } else {
+        let flat_idx = rng.gen_range(0, total_len);
+        let mut slice_idx = 0;
+        let mut elt_idx = 0;
+        let mut traversed_len = 0;
+        for s in slices {
+            traversed_len += s.as_ref().len();
+            if flat_idx < traversed_len {
+                elt_idx = flat_idx - (traversed_len - s.as_ref().len());
+                break;
+            }
+            slice_idx += 1;
+        }
+        let elt = &slices[slice_idx].as_ref()[elt_idx];
+        Some((slice_idx, elt))
+    }
 }
 
 #[cfg(test)]
@@ -165,7 +176,8 @@ mod tests {
         });
 
         let mut rng = SmallRng::from_seed([1; 16]);
-        let generated = chain.generate(&mut rng, chain.sources.iter(), 5, 6);
+        let selector = Selector { date_range: None };
+        let generated = chain.generate(&mut rng, &chain.sources, &selector, 5, 6);
         assert_eq!(
             generated,
             Some("сегодня у меня депрессия с собаками".into())
@@ -177,8 +189,9 @@ mod tests {
         let mut chain = MarkovChain::new();
         chain.append_message_dump("tests/fixtures/messages.html");
         let mut rng = SmallRng::from_seed([1; 16]);
-        let generated = chain.generate(&mut rng, chain.sources.iter(), 1, 3);
-        assert_eq!(generated, Some("жасминовый чай (´･ω･`)".into()));
+        let selector = Selector { date_range: None };
+        let generated = chain.generate(&mut rng, &chain.sources, &selector, 1, 3);
+        assert_eq!(generated, Some("жасминовый чай? 🤔🤔🤔".into()));
     }
 
     #[test]
@@ -186,10 +199,8 @@ mod tests {
         let mut chain = MarkovChain::new();
         chain.append_message_dump("tests/fixtures/messages.html");
         let mut rng = SmallRng::from_seed([1; 16]);
-        let generated = chain.generate_in_date_range(
-            &mut rng,
-            chain.sources.iter(),
-            (
+        let selector = Selector {
+            date_range: Some((
                 Datestamp {
                     year: 2018,
                     day: 10,
@@ -198,10 +209,9 @@ mod tests {
                     year: 2018,
                     day: 21,
                 },
-            ),
-            2,
-            6,
-        );
-        assert_eq!(generated, Some("Привет Denko Пью жасминовый чай".into()));
+            )),
+        };
+        let generated = chain.generate(&mut rng, &chain.sources, &selector, 2, 6);
+        assert_eq!(generated, Some("жасминовый чай (´･ω･`)".into()));
     }
 }

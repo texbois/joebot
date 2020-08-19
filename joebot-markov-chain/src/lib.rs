@@ -1,8 +1,10 @@
 mod append;
 mod generate;
+mod selector;
 
 pub use append::ChainAppend;
 pub use generate::ChainGenerate;
+pub use selector::Selector;
 
 use indexmap::IndexSet;
 use serde::{Deserialize, Serialize};
