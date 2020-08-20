@@ -1,8 +1,8 @@
 use crate::{ChainEntry, MarkovChain, Selector, TextSource};
 use indexmap::IndexSet;
 use rand::Rng;
-use std::collections::HashSet;
 use std::borrow::Borrow;
+use std::collections::HashSet;
 
 const MAX_TRIES: usize = 30;
 
@@ -51,7 +51,8 @@ fn generate_sequence<R: Rng, S: Borrow<TextSource>>(
         .as_ref()
         .into_iter()
         .map(|es| {
-            es.borrow().entries
+            es.borrow()
+                .entries
                 .iter()
                 .filter(|e| e.prefix.is_starting() && selector.filter_entry(e))
                 .collect::<Vec<&ChainEntry>>()
@@ -77,7 +78,8 @@ fn generate_sequence<R: Rng, S: Borrow<TextSource>>(
                 .as_ref()
                 .into_iter()
                 .map(|es| {
-                    es.borrow().entries
+                    es.borrow()
+                        .entries
                         .iter()
                         .filter(|e| {
                             e.prefix.word_idxs()[0] == edge.suffix.word_idx()
@@ -176,7 +178,7 @@ mod tests {
         });
 
         let mut rng = SmallRng::from_seed([1; 16]);
-        let selector = Selector { date_range: None };
+        let selector = Selector::new(&chain.sources, "джилл & дана", None).unwrap();
         let generated = chain.generate(&mut rng, &chain.sources, &selector, 5, 6);
         assert_eq!(
             generated,
@@ -189,7 +191,7 @@ mod tests {
         let mut chain = MarkovChain::new();
         chain.append_message_dump("tests/fixtures/messages.html");
         let mut rng = SmallRng::from_seed([1; 16]);
-        let selector = Selector { date_range: None };
+        let selector = Selector::new(&chain.sources, "sota & denko", None).unwrap();
         let generated = chain.generate(&mut rng, &chain.sources, &selector, 1, 3);
         assert_eq!(generated, Some("жасминовый чай? 🤔🤔🤔".into()));
     }
@@ -199,8 +201,11 @@ mod tests {
         let mut chain = MarkovChain::new();
         chain.append_message_dump("tests/fixtures/messages.html");
         let mut rng = SmallRng::from_seed([1; 16]);
-        let selector = Selector {
-            date_range: Some((
+
+        let selector = Selector::new(
+            &chain.sources,
+            "sota & denko",
+            Some((
                 Datestamp {
                     year: 2018,
                     day: 10,
@@ -210,7 +215,8 @@ mod tests {
                     day: 21,
                 },
             )),
-        };
+        )
+        .unwrap();
         let generated = chain.generate(&mut rng, &chain.sources, &selector, 2, 6);
         assert_eq!(generated, Some("жасминовый чай (´･ω･`)".into()));
     }

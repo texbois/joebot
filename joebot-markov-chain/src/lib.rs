@@ -4,10 +4,11 @@ mod selector;
 
 pub use append::ChainAppend;
 pub use generate::ChainGenerate;
-pub use selector::Selector;
+pub use selector::{Selector, SelectorError};
 
 use indexmap::IndexSet;
 use serde::{Deserialize, Serialize};
+use std::hash::{Hash, Hasher};
 
 pub const NGRAM_CNT: usize = 2; // Use a bigram markov chain model
 
@@ -94,6 +95,22 @@ pub struct ChainEntry {
 pub struct TextSource {
     pub names: IndexSet<String>,
     pub entries: Vec<ChainEntry>,
+}
+
+impl PartialEq for TextSource {
+    fn eq(&self, other: &Self) -> bool {
+        self.names == other.names
+    }
+}
+
+impl Eq for TextSource {}
+
+impl Hash for TextSource {
+    fn hash<H: Hasher>(&self, hasher: &mut H) {
+        for n in &self.names {
+            n.hash(hasher);
+        }
+    }
 }
 
 #[derive(Default, Debug, Serialize, Deserialize)]

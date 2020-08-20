@@ -88,13 +88,17 @@ fn do_mashup(command: &str, chain: &MarkovChain, rng: &mut SmallRng) -> String {
     } else {
         (command, None)
     };
-    match pick_sources(names_str, &chain.sources) {
-        Ok(sources) => {
-            let selector = joebot_markov_chain::Selector { date_range };
-            chain.generate(rng, &sources, &selector, 15, 40)
-        }
-        .unwrap_or_else(|| String::from("\u{274c}")),
-        Err(err) => err,
+    match joebot_markov_chain::Selector::new(&chain.sources, names_str, date_range) {
+        Ok(selector) =>
+            chain.generate(rng, &chain.sources, &selector, 15, 40).unwrap_or_else(|| String::from("\u{274c}")),
+        Err(joebot_markov_chain::SelectorError::EmptyQuery) =>
+            "Пустой запрос, приятель.".into(),
+        Err(joebot_markov_chain::SelectorError::ParserExpectedTerm { location }) =>
+            format!("Неправильный запрос, приятель.\nМой железный бык нашептал мне, что он ожидал увидеть имя вот здесь: {}", location),
+        Err(joebot_markov_chain::SelectorError::ParserUnbalancedParentheses { location }) =>
+            format!("Неправильный запрос, приятель.\nМой железный бык нашептал мне, что у тебя незакрыты скобки: {}", location),
+        Err(joebot_markov_chain::SelectorError::UnknownTerm { term }) =>
+            format!("\u{274c} {}? Такого я здесь не встречал, приятель.", term)
     }
 }
 

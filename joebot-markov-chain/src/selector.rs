@@ -1,16 +1,46 @@
 use crate::{ChainEntry, Datestamp, TextSource};
+use std::collections::{HashMap, HashSet};
 
-pub struct Selector {
-    pub date_range: Option<(Datestamp, Datestamp)>,
+pub struct Selector<'a> {
+    date_range: Option<(Datestamp, Datestamp)>,
+    query: QueryExpression,
+    source_to_term_map: HashMap<&'a TextSource, String>,
 }
 
-impl Selector {
+#[derive(Debug, Eq, PartialEq)]
+pub enum SelectorError {
+    EmptyQuery,
+    UnknownTerm { term: String },
+    ParserUnbalancedParentheses { location: String },
+    ParserExpectedTerm { location: String },
+}
+
+impl<'a> Selector<'a> {
     pub fn new(
-        sources: &[TextSource],
-        source_query: &str,
+        sources: &'a [TextSource],
+        source_query_str: &str,
         date_range: Option<(Datestamp, Datestamp)>,
-    ) -> Result<Self, String> {
-        unimplemented!()
+    ) -> Result<Self, SelectorError> {
+        let query = QueryExpression::parse(source_query_str)?;
+        let terms = query.unique_terms();
+
+        let mut source_to_term_map = HashMap::new();
+        for term in terms {
+            let source = sources.iter().find(|s| s.names.contains(term));
+            if let Some(s) = source {
+                source_to_term_map.insert(s, term.to_owned());
+            } else {
+                return Err(SelectorError::UnknownTerm {
+                    term: term.to_owned(),
+                });
+            }
+        }
+
+        Ok(Self {
+            date_range,
+            query,
+            source_to_term_map,
+        })
     }
 
     pub fn filter_entry(&self, e: &ChainEntry) -> bool {
@@ -30,6 +60,7 @@ impl Selector {
 //        | term ;
 // term = [A-Za-z0-9]([A-Za-z0-9 ]+[A-Za-z0-9])? ;
 
+#[derive(Eq, PartialEq)]
 pub enum QueryExpression {
     Disjunction(Box<QueryExpression>, Box<QueryExpression>),
     Conjunction(Box<QueryExpression>, Box<QueryExpression>),
@@ -49,16 +80,35 @@ impl std::fmt::Debug for QueryExpression {
 }
 
 impl QueryExpression {
-    pub fn parse(input: &str) -> Result<Self, String> {
+    pub fn parse(input: &str) -> Result<Self, SelectorError> {
         if input.is_empty() {
-            return Err("Empty query string".into())
+            return Err(SelectorError::EmptyQuery);
         }
 
         let mut lexer = QueryLexer::new(input);
         QueryExpression::disjunction(&mut lexer)
     }
 
-    fn disjunction(l: &mut QueryLexer) -> Result<Self, String> {
+    pub fn unique_terms(&self) -> HashSet<&str> {
+        fn iter<'a>(q: &'a QueryExpression, term_set: &mut HashSet<&'a str>) {
+            match q {
+                QueryExpression::Disjunction(a, b) | QueryExpression::Conjunction(a, b) => {
+                    iter(&*a, term_set);
+                    iter(&*b, term_set);
+                }
+                QueryExpression::Negation(c) => iter(&*c, term_set),
+                QueryExpression::Term(t) => {
+                    term_set.insert(&t);
+                }
+            }
+        };
+
+        let mut term_set = HashSet::new();
+        iter(self, &mut term_set);
+        term_set
+    }
+
+    fn disjunction(l: &mut QueryLexer) -> Result<Self, SelectorError> {
         let lhs = QueryExpression::conjunction(l)?;
         let mut rhs: Option<QueryExpression> = None;
         while l.char('|') {
@@ -76,7 +126,7 @@ impl QueryExpression {
         }
     }
 
-    fn conjunction(l: &mut QueryLexer) -> Result<Self, String> {
+    fn conjunction(l: &mut QueryLexer) -> Result<Self, SelectorError> {
         let lhs = QueryExpression::clause(l)?;
         let mut rhs: Option<QueryExpression> = None;
         while l.char('&') {
@@ -94,14 +144,16 @@ impl QueryExpression {
         }
     }
 
-    fn clause(l: &mut QueryLexer) -> Result<Self, String> {
+    fn clause(l: &mut QueryLexer) -> Result<Self, SelectorError> {
         if l.char('!') {
             let clause = QueryExpression::clause(l)?;
             Ok(QueryExpression::Negation(Box::new(clause)))
         } else if l.char('(') {
             let clause = QueryExpression::disjunction(l)?;
             if !l.char(')') {
-                Err(l.error("Unbalanced parentheses"))
+                Err(SelectorError::ParserUnbalancedParentheses {
+                    location: l.error_location(),
+                })
             } else {
                 Ok(clause)
             }
@@ -111,10 +163,12 @@ impl QueryExpression {
         }
     }
 
-    fn term(l: &mut QueryLexer) -> Result<Self, String> {
+    fn term(l: &mut QueryLexer) -> Result<Self, SelectorError> {
         let content = l.term();
         if content.is_empty() {
-            Err(l.error("Expected an alphanumerical term"))
+            Err(SelectorError::ParserExpectedTerm {
+                location: l.error_location(),
+            })
         } else {
             Ok(QueryExpression::Term(content.to_owned()))
         }
@@ -131,14 +185,9 @@ impl<'a> QueryLexer<'a> {
         Self { input, curr: input }
     }
 
-    fn error(&self, description: &str) -> String {
-        let before_curr = self.input.len() - self.curr.len();
-        format!(
-            "{}: \"{}\" ^ here ^ \"{}\"",
-            description,
-            &self.input[..before_curr],
-            self.curr
-        )
+    fn error_location(&self) -> String {
+        let at = self.input.len() - self.curr.len();
+        format!("\"{}\" ^ here ^ \"{}\"", &self.input[..at], self.curr)
     }
 
     fn char(&mut self, c: char) -> bool {
@@ -203,18 +252,34 @@ mod tests {
     }
 
     #[test]
-    fn query_parser_err()
-    {
+    fn query_parser_err() {
+        use SelectorError::*;
+
         let mut q = QueryExpression::parse("(a | b");
-        assert_eq!("Err(\"Unbalanced parentheses: \\\"(a | b\\\" ^ here ^ \\\"\\\"\")", format!("{:?}", q));
+        assert_eq!(
+            Err(ParserUnbalancedParentheses {
+                location: "\"(a | b\" ^ here ^ \"\"".into()
+            }),
+            q
+        );
 
         q = QueryExpression::parse("a | #@");
-        assert_eq!("Err(\"Expected an alphanumerical term: \\\"a | \\\" ^ here ^ \\\"#@\\\"\")", format!("{:?}", q));
+        assert_eq!(
+            Err(ParserExpectedTerm {
+                location: "\"a | \" ^ here ^ \"#@\"".into()
+            }),
+            q
+        );
 
         q = QueryExpression::parse("#@");
-        assert_eq!("Err(\"Expected an alphanumerical term: \\\"\\\" ^ here ^ \\\"#@\\\"\")", format!("{:?}", q));
+        assert_eq!(
+            Err(ParserExpectedTerm {
+                location: "\"\" ^ here ^ \"#@\"".into()
+            }),
+            q
+        );
 
         q = QueryExpression::parse("");
-        assert_eq!("Err(\"Empty query string\")", format!("{:?}", q));
+        assert_eq!(Err(EmptyQuery), q);
     }
 }
