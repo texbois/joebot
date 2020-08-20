@@ -1,4 +1,4 @@
-use crate::{ChainEntry, MarkovChain, Selector};
+use crate::{ChainEntry, MarkovChain, Selector, TextSource};
 use indexmap::IndexSet;
 use rand::Rng;
 use std::collections::HashSet;
@@ -54,25 +54,28 @@ fn generate_sequence<R: Rng>(
         .collect();
 
     while tries < MAX_TRIES {
-        let mut edge_sources: HashSet<usize> = HashSet::with_capacity(sources.len());
+        let mut edge_sources: HashSet<&TextSource> = HashSet::with_capacity(sources.len());
         let mut next_edges: Vec<Vec<&ChainEntry>>;
 
-        let (mut edge_source, mut edge) = pick_from_2d(&starting_edges, rng)?;
+        let (mut edge_source_idx, mut edge) = pick_from_2d(&starting_edges, rng)?;
         loop {
-            edge_sources.insert(edge_source);
+            edge_sources.insert(sources[edge_source_idx]);
             generated.extend_from_slice(&edge.prefix.word_idxs());
             if generated.len() > max_words {
                 break;
             }
             if generated.len() >= min_words && edge.suffix.is_terminal() {
                 generated.push(edge.suffix.word_idx());
-                return Some(generated);
+                if selector.matches_query(edge_sources) {
+                    return Some(generated);
+                } else {
+                    break;
+                }
             }
             next_edges = sources
                 .iter()
                 .map(|es| {
-                    es
-                        .entries
+                    es.entries
                         .iter()
                         .filter(|e| {
                             e.prefix.word_idxs()[0] == edge.suffix.word_idx()
@@ -82,8 +85,8 @@ fn generate_sequence<R: Rng>(
                 })
                 .collect::<Vec<_>>();
             match pick_from_2d(&next_edges, rng) {
-                Some((e_source, e)) => {
-                    edge_source = e_source;
+                Some((e_src_idx, e)) => {
+                    edge_source_idx = e_src_idx;
                     edge = e;
                 }
                 None => break,
@@ -184,7 +187,7 @@ mod tests {
         let mut chain = MarkovChain::new();
         chain.append_message_dump("tests/fixtures/messages.html");
         let mut rng = SmallRng::from_seed([1; 16]);
-        let selector = Selector::new(&chain, "sota & denko", None).unwrap();
+        let selector = Selector::new(&chain, "sota | denko", None).unwrap();
         let generated = chain.generate(&selector, &mut rng, 1, 3);
         assert_eq!(generated, Some("жасминовый чай (´･ω･`)".into()));
     }
@@ -197,7 +200,7 @@ mod tests {
 
         let selector = Selector::new(
             &chain,
-            "sota & denko",
+            "sota | denko",
             Some((
                 Datestamp {
                     year: 2018,

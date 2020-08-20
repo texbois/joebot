@@ -47,6 +47,14 @@ impl<'a> Selector<'a> {
         self.source_to_term_map.keys().copied().collect()
     }
 
+    pub fn matches_query(&self, used_sources: HashSet<&TextSource>) -> bool {
+        let used_terms = used_sources
+            .into_iter()
+            .map(|s| self.source_to_term_map[s].as_str())
+            .collect::<HashSet<_>>();
+        self.query.eval(&used_terms)
+    }
+
     pub fn filter_entry(&self, e: &ChainEntry) -> bool {
         if let Some((min_date, max_date)) = self.date_range {
             e.datestamp >= min_date && e.datestamp <= max_date
@@ -91,6 +99,15 @@ impl QueryExpression {
 
         let mut lexer = QueryLexer::new(input);
         QueryExpression::disjunction(&mut lexer)
+    }
+
+    pub fn eval(&self, used_terms: &HashSet<&str>) -> bool {
+        match self {
+            QueryExpression::Disjunction(a, b) => a.eval(used_terms) || b.eval(used_terms),
+            QueryExpression::Conjunction(a, b) => a.eval(used_terms) && b.eval(used_terms),
+            QueryExpression::Negation(c) => !c.eval(used_terms),
+            QueryExpression::Term(t) => used_terms.contains(&t.as_str()),
+        }
     }
 
     pub fn unique_terms(&self) -> HashSet<&str> {
@@ -285,5 +302,15 @@ mod tests {
 
         q = QueryExpression::parse("");
         assert_eq!(Err(EmptyQuery), q);
+    }
+
+    #[test]
+    fn test_query_eval() {
+        let q = QueryExpression::parse("(a | b) & (c | d)").unwrap();
+        let used_terms = &["a", "b"].iter().map(|s| s.to_owned()).collect::<HashSet<_>>();
+        assert_eq!(false, q.eval(&used_terms));
+
+        let used_terms = &["a", "d"].iter().map(|s| s.to_owned()).collect::<HashSet<_>>();
+        assert_eq!(true, q.eval(&used_terms));
     }
 }
