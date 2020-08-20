@@ -88,9 +88,9 @@ fn do_mashup(command: &str, chain: &MarkovChain, rng: &mut SmallRng) -> String {
     } else {
         (command, None)
     };
-    match joebot_markov_chain::Selector::new(&chain.sources, names_str, date_range) {
+    match joebot_markov_chain::Selector::new(&chain, names_str, date_range) {
         Ok(selector) =>
-            chain.generate(rng, &chain.sources, &selector, 15, 40).unwrap_or_else(|| String::from("\u{274c}")),
+            chain.generate(&selector, rng, 15, 40).unwrap_or_else(|| String::from("\u{274c}")),
         Err(joebot_markov_chain::SelectorError::EmptyQuery) =>
             "Пустой запрос, приятель.".into(),
         Err(joebot_markov_chain::SelectorError::ParserExpectedTerm { location }) =>

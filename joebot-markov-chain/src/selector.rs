@@ -1,4 +1,4 @@
-use crate::{ChainEntry, Datestamp, TextSource};
+use crate::{ChainEntry, Datestamp, MarkovChain, TextSource};
 use std::collections::{HashMap, HashSet};
 
 pub struct Selector<'a> {
@@ -17,7 +17,7 @@ pub enum SelectorError {
 
 impl<'a> Selector<'a> {
     pub fn new(
-        sources: &'a [TextSource],
+        chain: &'a MarkovChain,
         source_query_str: &str,
         date_range: Option<(Datestamp, Datestamp)>,
     ) -> Result<Self, SelectorError> {
@@ -26,7 +26,7 @@ impl<'a> Selector<'a> {
 
         let mut source_to_term_map = HashMap::new();
         for term in terms {
-            let source = sources.iter().find(|s| s.names.contains(term));
+            let source = chain.sources.iter().find(|s| s.names.contains(term));
             if let Some(s) = source {
                 source_to_term_map.insert(s, term.to_owned());
             } else {
@@ -41,6 +41,10 @@ impl<'a> Selector<'a> {
             query,
             source_to_term_map,
         })
+    }
+
+    pub fn sources(&self) -> Vec<&TextSource> {
+        self.source_to_term_map.keys().copied().collect()
     }
 
     pub fn filter_entry(&self, e: &ChainEntry) -> bool {

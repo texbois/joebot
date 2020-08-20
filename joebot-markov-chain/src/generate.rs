@@ -1,33 +1,29 @@
-use crate::{ChainEntry, MarkovChain, Selector, TextSource};
+use crate::{ChainEntry, MarkovChain, Selector};
 use indexmap::IndexSet;
 use rand::Rng;
-use std::borrow::Borrow;
 use std::collections::HashSet;
 
 const MAX_TRIES: usize = 30;
 
 pub trait ChainGenerate {
-    fn generate<R: Rng, S: Borrow<TextSource>>(
+    fn generate<R: Rng>(
         &self,
-        rng: &mut R,
-        sources: &[S],
         selector: &Selector,
+        rng: &mut R,
         min_words: usize,
         max_words: usize,
     ) -> Option<String>;
 }
 
 impl ChainGenerate for MarkovChain {
-    fn generate<R: Rng, S: Borrow<TextSource>>(
+    fn generate<R: Rng>(
         &self,
-        rng: &mut R,
-        sources: &[S],
         selector: &Selector,
+        rng: &mut R,
         min_words: usize,
         max_words: usize,
     ) -> Option<String> {
-        generate_sequence(rng, sources, selector, min_words, max_words)
-            .map(|s| seq_to_text(s, &self.words))
+        generate_sequence(selector, rng, min_words, max_words).map(|s| seq_to_text(s, &self.words))
     }
 }
 
@@ -38,21 +34,19 @@ fn seq_to_text(seq: Vec<u32>, words: &IndexSet<String>) -> String {
         .join(" ")
 }
 
-fn generate_sequence<R: Rng, S: Borrow<TextSource>>(
-    rng: &mut R,
-    sources: &[S],
+fn generate_sequence<R: Rng>(
     selector: &Selector,
+    rng: &mut R,
     min_words: usize,
     max_words: usize,
 ) -> Option<Vec<u32>> {
     let mut tries = 0;
     let mut generated: Vec<u32> = Vec::with_capacity(min_words as usize);
+    let sources = selector.sources();
     let starting_edges: Vec<Vec<&ChainEntry>> = sources
-        .as_ref()
-        .into_iter()
+        .iter()
         .map(|es| {
-            es.borrow()
-                .entries
+            es.entries
                 .iter()
                 .filter(|e| e.prefix.is_starting() && selector.filter_entry(e))
                 .collect::<Vec<&ChainEntry>>()
@@ -60,7 +54,7 @@ fn generate_sequence<R: Rng, S: Borrow<TextSource>>(
         .collect();
 
     while tries < MAX_TRIES {
-        let mut edge_sources: HashSet<usize> = HashSet::with_capacity(sources.as_ref().len());
+        let mut edge_sources: HashSet<usize> = HashSet::with_capacity(sources.len());
         let mut next_edges: Vec<Vec<&ChainEntry>>;
 
         let (mut edge_source, mut edge) = pick_from_2d(&starting_edges, rng)?;
@@ -75,10 +69,9 @@ fn generate_sequence<R: Rng, S: Borrow<TextSource>>(
                 return Some(generated);
             }
             next_edges = sources
-                .as_ref()
-                .into_iter()
+                .iter()
                 .map(|es| {
-                    es.borrow()
+                    es
                         .entries
                         .iter()
                         .filter(|e| {
@@ -178,8 +171,8 @@ mod tests {
         });
 
         let mut rng = SmallRng::from_seed([1; 16]);
-        let selector = Selector::new(&chain.sources, "джилл & дана", None).unwrap();
-        let generated = chain.generate(&mut rng, &chain.sources, &selector, 5, 6);
+        let selector = Selector::new(&chain, "джилл & дана", None).unwrap();
+        let generated = chain.generate(&selector, &mut rng, 5, 6);
         assert_eq!(
             generated,
             Some("сегодня у меня депрессия с собаками".into())
@@ -191,9 +184,9 @@ mod tests {
         let mut chain = MarkovChain::new();
         chain.append_message_dump("tests/fixtures/messages.html");
         let mut rng = SmallRng::from_seed([1; 16]);
-        let selector = Selector::new(&chain.sources, "sota & denko", None).unwrap();
-        let generated = chain.generate(&mut rng, &chain.sources, &selector, 1, 3);
-        assert_eq!(generated, Some("жасминовый чай? 🤔🤔🤔".into()));
+        let selector = Selector::new(&chain, "sota & denko", None).unwrap();
+        let generated = chain.generate(&selector, &mut rng, 1, 3);
+        assert_eq!(generated, Some("жасминовый чай (´･ω･`)".into()));
     }
 
     #[test]
@@ -203,7 +196,7 @@ mod tests {
         let mut rng = SmallRng::from_seed([1; 16]);
 
         let selector = Selector::new(
-            &chain.sources,
+            &chain,
             "sota & denko",
             Some((
                 Datestamp {
@@ -217,7 +210,7 @@ mod tests {
             )),
         )
         .unwrap();
-        let generated = chain.generate(&mut rng, &chain.sources, &selector, 2, 6);
+        let generated = chain.generate(&selector, &mut rng, 2, 6);
         assert_eq!(generated, Some("жасминовый чай (´･ω･`)".into()));
     }
 }
