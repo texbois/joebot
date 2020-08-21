@@ -3,7 +3,7 @@ use indexmap::IndexSet;
 use rand::Rng;
 use std::collections::HashSet;
 
-const MAX_TRIES: usize = 30;
+const MAX_TRIES: usize = 100;
 
 pub trait ChainGenerate {
     fn generate<R: Rng>(
