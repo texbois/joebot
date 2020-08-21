@@ -1,8 +1,8 @@
 use crate::{utils::split_command_rest, JoeResult};
-use joebot_markov_chain::{ChainGenerate, Datestamp, MarkovChain, TextSource};
+use joebot_markov_chain::{ChainGenerate, Datestamp, MarkovChain, Selector, SelectorError};
 use phf::phf_map;
 use rand::{rngs::SmallRng, SeedableRng};
-use serenity::{model::prelude::*, prelude::*};
+use serenity::{builder::CreateMessage, model::prelude::*, prelude::*};
 
 static DATE_RANGE_MAP: phf::Map<&'static str, (Datestamp, Datestamp)> = phf_map! {
     "первый курс" => (Datestamp { year: 2017, day: 182 }, Datestamp { year: 2018, day: 182 }),
@@ -18,9 +18,8 @@ static DATE_RANGE_MAP: phf::Map<&'static str, (Datestamp, Datestamp)> = phf_map!
 };
 
 pub struct Chain {
-    chain: joebot_markov_chain::MarkovChain,
+    chain: MarkovChain,
     rng: SmallRng,
-    last_command: String,
 }
 
 impl Chain {
@@ -28,88 +27,162 @@ impl Chain {
         Self {
             chain,
             rng: SmallRng::from_entropy(),
-            last_command: String::new(),
         }
     }
+}
+
+fn chain_help<'a, 'b>(m: &'b mut CreateMessage<'a>) -> &'b mut CreateMessage<'a> {
+    m.embed(|e| {
+        e.color(crate::EMBED_COLOR);
+        e.title("мэшап");
+        e.description(
+            r#"
+Выбери источники, от которых хочешь услышать сплетни.
+Список всех источников — `!mashupstars`
+
+Текст от одного из источников a, b, c:
+`!mashup a | b | c`
+
+Текст от всех источников a, b, c одновременно:
+`!mashup a & b & c`
+
+Сложные селекторы удовольствия:
+`!mashup (a | b) & (c | d)`
+
+Ограничение источника по времени:
+`!mashup a | b [шестой сем]`
+`!mashup a | b [третий курс]`"#,
+        );
+        e
+    });
+    m
+}
+
+fn chain_invalid_date_range<'a, 'b>(
+    d: &'a str,
+    m: &'b mut CreateMessage<'a>,
+) -> &'b mut CreateMessage<'a> {
+    m.embed(|e| {
+        e.color(crate::EMBED_COLOR);
+        e.title(format!("{}? Давно это было.", d));
+        e.description(format!(
+            "Спроси меня про {}",
+            DATE_RANGE_MAP
+                .keys()
+                .copied()
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+        e
+    });
+    m
+}
+
+fn chain_selector_error<'a, 'b>(
+    e: SelectorError,
+    m: &'b mut CreateMessage<'a>,
+) -> &'b mut CreateMessage<'a> {
+    let msg = match e {
+        SelectorError::EmptyQuery => return chain_help(m),
+        SelectorError::ParserExpectedTerm { location } => format!(
+            "Мой железный бык нашептал мне, что он ожидал увидеть имя вот здесь: {}",
+            location
+        ),
+        SelectorError::ParserUnbalancedParentheses { location } => format!(
+            "Мой железный бык нашептал мне, что у тебя не закрыты скобки: {}",
+            location
+        ),
+        SelectorError::UnknownTerm { term } => format!(
+            "Мой железный бык нашептал мне, что про \"{}\" в этих краях не слыхали.",
+            term
+        ),
+    };
+    m.embed(|e| {
+        e.color(crate::EMBED_COLOR);
+        e.title("Неправильный запрос, приятель.");
+        e.description(msg);
+        e
+    });
+    m
+}
+
+fn chain_sources<'a, 'b>(
+    c: &MarkovChain,
+    m: &'b mut CreateMessage<'a>,
+) -> &'b mut CreateMessage<'a> {
+    m.embed(|e| {
+        e.color(crate::EMBED_COLOR);
+        e.title("мэшапстарс");
+        e.description(format!(
+            "* {}\n",
+            c.sources
+                .iter()
+                .map(|s| s.name_re.as_str())
+                .collect::<Vec<_>>()
+                .join("\n* ")
+        ));
+        e
+    });
+    m
 }
 
 impl super::Command for Chain {
     fn handle_message(&mut self, ctx: &Context, msg: &Message) -> JoeResult<bool> {
         let (command, rest) = split_command_rest(msg);
-        let resp = match command {
+        match command {
             "!mashup" => {
-                self.last_command = rest.trim().to_owned();
-                Some(do_mashup(&self.last_command, &self.chain, &mut self.rng))
-            }
-            "!mashupmore" => Some(do_mashup(&self.last_command, &self.chain, &mut self.rng)),
-            "!mashupstars" => Some(mashup_sources(&self.chain)),
-            _ => None,
-        };
-        if let Some(r) = resp {
-            msg.channel_id.say(&ctx.http, r)?;
-            Ok(true)
-        } else {
-            Ok(false)
-        }
-    }
-}
-
-fn do_mashup(command: &str, chain: &MarkovChain, rng: &mut SmallRng) -> String {
-    if command.is_empty() {
-        return [
-            "\u{2753} Примеры:\n",
-            "!mashup joe, ma\n",
-            "!mashup joe, етестер (пятый сем)\n",
-            "!mashup joe, ma, овт (первый курс)",
-        ]
-        .concat();
-    }
-    let (names_str, date_range) = if command.ends_with(')') {
-        match command[..command.len() - 1]
-            .rsplitn(2, '(')
-            .collect::<Vec<_>>()[..]
-        {
-            [date, names] => match DATE_RANGE_MAP.get(date.trim()) {
-                Some(range) => (names, Some(range.clone())),
-                _ => {
-                    return format!(
-                        "\u{274c} {}? Давно это было. Я помню только {}.",
-                        date,
-                        DATE_RANGE_MAP
-                            .keys()
-                            .copied()
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    )
+                let mashup_cmd = rest.trim();
+                if mashup_cmd.is_empty() {
+                    msg.channel_id.send_message(&ctx.http, chain_help)?;
+                    return Ok(true);
                 }
-            },
-            _ => (command, None),
+                let (names_str, date_range) = if rest.ends_with(']') {
+                    match rest[..rest.len() - 1]
+                        .rsplitn(2, '[')
+                        .collect::<Vec<_>>()[..]
+                    {
+                        [date, names] => match DATE_RANGE_MAP.get(date.trim()) {
+                            Some(range) => (names, Some(range.clone())),
+                            _ => {
+                                msg.channel_id.send_message(&ctx.http, |m| {
+                                    chain_invalid_date_range(date, m)
+                                })?;
+                                return Ok(true);
+                            }
+                        },
+                        _ => (rest, None),
+                    }
+                } else {
+                    (rest, None)
+                };
+                match Selector::new(&self.chain, names_str, date_range) {
+                    Ok(selector) => {
+                        let text = do_mashup(&self.chain, &mut self.rng, &selector);
+                        msg.channel_id.say(&ctx.http, text)?;
+                    }
+                    Err(e) => {
+                        msg.channel_id
+                            .send_message(&ctx.http, |m| chain_selector_error(e, m))?;
+                    }
+                };
+                Ok(true)
+            }
+            "!mashupmore" => {
+                msg.channel_id.say(&ctx.http, "Unsupported")?;
+                Ok(true)
+            }
+            "!mashupstars" => {
+                msg.channel_id
+                    .send_message(&ctx.http, |m| chain_sources(&self.chain, m))?;
+                Ok(true)
+            }
+            _ => Ok(false),
         }
-    } else {
-        (command, None)
-    };
-    match joebot_markov_chain::Selector::new(&chain, names_str, date_range) {
-        Ok(selector) =>
-            chain.generate(&selector, rng, 15, 40).unwrap_or_else(|| String::from("\u{274c}")),
-        Err(joebot_markov_chain::SelectorError::EmptyQuery) =>
-            "Пустой запрос, приятель.".into(),
-        Err(joebot_markov_chain::SelectorError::ParserExpectedTerm { location }) =>
-            format!("Неправильный запрос, приятель.\nМой железный бык нашептал мне, что он ожидал увидеть имя вот здесь: {}", location),
-        Err(joebot_markov_chain::SelectorError::ParserUnbalancedParentheses { location }) =>
-            format!("Неправильный запрос, приятель.\nМой железный бык нашептал мне, что у тебя незакрыты скобки: {}", location),
-        Err(joebot_markov_chain::SelectorError::UnknownTerm { term }) =>
-            format!("\u{274c} {}? Такого я здесь не встречал, приятель.", term)
     }
 }
 
-fn mashup_sources(chain: &MarkovChain) -> String {
-    format!(
-        "* {}\n",
-        chain
-            .sources
-            .iter()
-            .map(|s| s.name_re.as_str())
-            .collect::<Vec<_>>()
-            .join("\n* ")
-    )
+fn do_mashup(chain: &MarkovChain, rng: &mut SmallRng, selector: &Selector) -> String {
+    chain
+        .generate(selector, rng, 15, 40)
+        .unwrap_or_else(|| String::from(r"¯\_(ツ)_/¯"))
 }

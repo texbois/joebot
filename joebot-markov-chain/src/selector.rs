@@ -208,7 +208,7 @@ impl<'a> QueryLexer<'a> {
 
     fn error_location(&self) -> String {
         let at = self.input.len() - self.curr.len();
-        format!("\"{}\" ^ here ^ \"{}\"", &self.input[..at], self.curr)
+        format!("\"{}\" ^ \"{}\"", &self.input[..at], self.curr)
     }
 
     fn char(&mut self, c: char) -> bool {
@@ -279,7 +279,7 @@ mod tests {
         let mut q = QueryExpression::parse("(a | b");
         assert_eq!(
             Err(ParserUnbalancedParentheses {
-                location: "\"(a | b\" ^ here ^ \"\"".into()
+                location: "\"(a | b\" ^ \"\"".into()
             }),
             q
         );
@@ -287,7 +287,7 @@ mod tests {
         q = QueryExpression::parse("a | #@");
         assert_eq!(
             Err(ParserExpectedTerm {
-                location: "\"a | \" ^ here ^ \"#@\"".into()
+                location: "\"a | \" ^ \"#@\"".into()
             }),
             q
         );
@@ -295,7 +295,7 @@ mod tests {
         q = QueryExpression::parse("#@");
         assert_eq!(
             Err(ParserExpectedTerm {
-                location: "\"\" ^ here ^ \"#@\"".into()
+                location: "\"\" ^ \"#@\"".into()
             }),
             q
         );
