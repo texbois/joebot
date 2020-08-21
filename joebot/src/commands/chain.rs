@@ -1,4 +1,5 @@
 use crate::{utils::split_command_rest, JoeResult};
+use circular_queue::CircularQueue;
 use joebot_markov_chain::{ChainGenerate, Datestamp, MarkovChain, Selector, SelectorError};
 use phf::phf_map;
 use rand::{rngs::SmallRng, SeedableRng};
@@ -20,6 +21,7 @@ static DATE_RANGE_MAP: phf::Map<&'static str, (Datestamp, Datestamp)> = phf_map!
 pub struct Chain {
     chain: MarkovChain,
     rng: SmallRng,
+    prompt_history: CircularQueue<(MessageId, String)>,
 }
 
 impl Chain {
@@ -27,6 +29,7 @@ impl Chain {
         Self {
             chain,
             rng: SmallRng::from_entropy(),
+            prompt_history: CircularQueue::with_capacity(100),
         }
     }
 }
@@ -93,7 +96,7 @@ fn chain_selector_error<'a, 'b>(
             location
         ),
         SelectorError::UnknownTerm { term } => format!(
-            "Мой железный бык нашептал мне, что про \"{}\" в этих краях не слыхали.",
+            "Мой железный бык нашептал мне, что про \"{}\" в этих краях никто не слыхал.",
             term
         ),
     };
@@ -128,44 +131,11 @@ fn chain_sources<'a, 'b>(
 
 impl super::Command for Chain {
     fn handle_message(&mut self, ctx: &Context, msg: &Message) -> JoeResult<bool> {
-        let (command, rest) = split_command_rest(msg);
+        let (command, args_raw) = split_command_rest(msg);
+        let args = args_raw.to_lowercase();
         match command {
             "!mashup" => {
-                let mashup_cmd = rest.trim();
-                if mashup_cmd.is_empty() {
-                    msg.channel_id.send_message(&ctx.http, chain_help)?;
-                    return Ok(true);
-                }
-                let (names_str, date_range) = if rest.ends_with(']') {
-                    match rest[..rest.len() - 1].rsplitn(2, '[').collect::<Vec<_>>()[..] {
-                        [date, names] => match DATE_RANGE_MAP.get(date.trim()) {
-                            Some(range) => (names, Some(range.clone())),
-                            _ => {
-                                msg.channel_id.send_message(&ctx.http, |m| {
-                                    chain_invalid_date_range(date, m)
-                                })?;
-                                return Ok(true);
-                            }
-                        },
-                        _ => (rest, None),
-                    }
-                } else {
-                    (rest, None)
-                };
-                match Selector::new(&self.chain, names_str, date_range) {
-                    Ok(selector) => {
-                        let text = do_mashup(&self.chain, &mut self.rng, &selector);
-                        msg.channel_id.say(&ctx.http, text)?;
-                    }
-                    Err(e) => {
-                        msg.channel_id
-                            .send_message(&ctx.http, |m| chain_selector_error(e, m))?;
-                    }
-                };
-                Ok(true)
-            }
-            "!mashupmore" => {
-                msg.channel_id.say(&ctx.http, "Unsupported")?;
+                self.handle_mashup(ctx, msg.channel_id, args)?;
                 Ok(true)
             }
             "!mashupstars" => {
@@ -177,19 +147,69 @@ impl super::Command for Chain {
         }
     }
 
-    fn handle_reaction(&mut self, _ctx: &Context, rct: &Reaction) -> JoeResult<bool> {
+    fn handle_reaction(&mut self, ctx: &Context, rct: &Reaction) -> JoeResult<bool> {
         match &rct.emoji {
             ReactionType::Unicode(e) if e == "🔁" => {
-                println!("Received repeat reaction {:?}", rct);
-                Ok(true)
+                let prompt = self
+                    .prompt_history
+                    .iter()
+                    .find(|(mid, _)| *mid == rct.message_id)
+                    .map(|(_, p)| p.to_owned());
+                if let Some(p) = prompt {
+                    self.handle_mashup(ctx, rct.channel_id, p.to_owned())?;
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
             }
             _ => Ok(false),
         }
     }
 }
 
-fn do_mashup(chain: &MarkovChain, rng: &mut SmallRng, selector: &Selector) -> String {
-    chain
-        .generate(selector, rng, 15, 40)
-        .unwrap_or_else(|| String::from(r"¯\_(ツ)_/¯"))
+impl Chain {
+    fn handle_mashup(
+        &mut self,
+        ctx: &Context,
+        channel_id: ChannelId,
+        args: String,
+    ) -> JoeResult<()> {
+        if args.is_empty() || args.contains(',') /* old syntax */ {
+            channel_id.send_message(&ctx.http, chain_help)?;
+            return Ok(());
+        }
+        let (names_str, date_range) = if args.ends_with(']') {
+            match args[..args.len() - 1].rsplitn(2, '[').collect::<Vec<_>>()[..] {
+                [date, names] => match DATE_RANGE_MAP.get(date.trim()) {
+                    Some(range) => (names, Some(range.clone())),
+                    _ => {
+                        channel_id
+                            .send_message(&ctx.http, |m| chain_invalid_date_range(date, m))?;
+                        return Ok(());
+                    }
+                },
+                _ => (args.as_str(), None),
+            }
+        } else {
+            (args.as_str(), None)
+        };
+        match Selector::new(&self.chain, names_str, date_range) {
+            Ok(selector) => {
+                let text = self
+                    .chain
+                    .generate(&selector, &mut self.rng, 15, 40)
+                    .unwrap_or_else(|| String::from(r"¯\_(ツ)_/¯"));
+                let m = channel_id.send_message(&ctx.http, |m| {
+                    m.content(text);
+                    m.reactions(vec!['🔁']);
+                    m
+                })?;
+                self.prompt_history.push((m.id, args));
+            }
+            Err(e) => {
+                channel_id.send_message(&ctx.http, |m| chain_selector_error(e, m))?;
+            }
+        };
+        Ok(())
+    }
 }

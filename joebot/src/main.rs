@@ -163,7 +163,6 @@ fn bot_help<'a, 'b>(m: &'b mut CreateMessage<'a>) -> &'b mut CreateMessage<'a> {
             "мэшап",
             r#"
 `!mashup` — узнаем от бармена последние слухи
-`!mashupmore` — посплетничаем еще
 `!mashupstars` — поприветствуем жителей городка
 "#,
             false,

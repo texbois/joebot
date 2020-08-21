@@ -16,12 +16,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "alcs"
-version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f411ec469f16177489d7427a803ed485c87110a8aa88e026545ffcd2ee882447"
-
-[[package]]
 name = "async-channel"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -181,6 +175,15 @@ dependencies = [
  "num-traits",
  "serde",
  "time",
+]
+
+[[package]]
+name = "circular-queue"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d34327ead1c743a10db339de35fb58957564b99d248a67985c55638b22c59b5"
+dependencies = [
+ "version_check",
 ]
 
 [[package]]
@@ -579,8 +582,8 @@ checksum = "dc6f3ad7b9d11a0c00842ff8de1b60ee58661048eb8049ed33c73594f359d7e6"
 name = "joebot"
 version = "0.1.0"
 dependencies = [
- "alcs",
  "bincode",
+ "circular-queue",
  "joebot-markov-chain",
  "lazy_static",
  "phf",
