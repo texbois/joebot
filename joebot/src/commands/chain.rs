@@ -137,10 +137,7 @@ impl super::Command for Chain {
                     return Ok(true);
                 }
                 let (names_str, date_range) = if rest.ends_with(']') {
-                    match rest[..rest.len() - 1]
-                        .rsplitn(2, '[')
-                        .collect::<Vec<_>>()[..]
-                    {
+                    match rest[..rest.len() - 1].rsplitn(2, '[').collect::<Vec<_>>()[..] {
                         [date, names] => match DATE_RANGE_MAP.get(date.trim()) {
                             Some(range) => (names, Some(range.clone())),
                             _ => {
@@ -174,6 +171,16 @@ impl super::Command for Chain {
             "!mashupstars" => {
                 msg.channel_id
                     .send_message(&ctx.http, |m| chain_sources(&self.chain, m))?;
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
+    }
+
+    fn handle_reaction(&mut self, _ctx: &Context, rct: &Reaction) -> JoeResult<bool> {
+        match &rct.emoji {
+            ReactionType::Unicode(e) if e == "🔁" => {
+                println!("Received repeat reaction {:?}", rct);
                 Ok(true)
             }
             _ => Ok(false),

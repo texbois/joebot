@@ -1,5 +1,5 @@
 use lazy_static::lazy_static;
-use serenity::{model::prelude::*, prelude::*, utils::Color};
+use serenity::{builder::CreateMessage, model::prelude::*, prelude::*, utils::Color};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::error::Error;
@@ -56,56 +56,19 @@ impl<'a> Handler<'a> {
         }
         if msg.content.starts_with('!') {
             msg.channel_id
-                .send_message(&ctx.http, |m| {
-                    m.embed(|e| {
-                        e.color(EMBED_COLOR);
-                        e.title("Joe's Saloon");
-                        e.field(
-                            "таки",
-                            r#"
-`!takistart` — начнем партию
-`!takisuspects` — бросим взгляд на плакаты о розыске
-`!takistats` — поднимем бокал крепкого виски за самых метких стрелков
-                    "#,
-                            false,
-                        );
-                        e.field(
-                            "мэшап",
-                            r#"
-`!mashup` — узнаем от бармена последние слухи
-`!mashupmore` — посплетничаем еще
-`!mashupstars` — поприветствуем жителей городка
-"#,
-                            false,
-                        );
-                        e.field(
-                            "политика",
-                            r#"
-`!poll` — устроим честный суд
-"#,
-                            false,
-                        );
-                        e.field(
-                            "поговорим с джо",
-                            r#"
-`что думаешь об итмо и бонче`
-`джокер++`
-`джокер про итмо`
-`джокер про итмо и бонч`
-"#,
-                            false,
-                        );
-                        e.field(
-                            "займемся делом",
-                            "_покажи джо фотокарточку, о которой хочешь разузнать побольше_",
-                            false,
-                        );
-                        e
-                    });
-                    m
-                })
+                .send_message(&ctx.http, bot_help)
                 .map_err(|e| format!("Help: {:?}", e))?;
         }
+        Ok(())
+    }
+
+    fn handle_reaction(&self, ctx: Context, rct: Reaction) -> JoeResult<()> {
+        if let Some(ref user) = *self.bot_user.lock().borrow() {
+            if user.id == rct.user_id {
+                return Ok(());
+            }
+        }
+        self.dispatcher.lock().handle_reaction(&ctx, &rct)?;
         Ok(())
     }
 }
@@ -121,6 +84,15 @@ impl<'a> EventHandler for Handler<'a> {
             return;
         }
         if let Err(e) = self.handle_message(ctx, msg) {
+            eprintln!("{}", e)
+        }
+    }
+
+    fn reaction_add(&self, ctx: Context, rct: Reaction) {
+        if rct.channel_id != self.bot_channel_id {
+            return;
+        }
+        if let Err(e) = self.handle_reaction(ctx, rct) {
             eprintln!("{}", e)
         }
     }
@@ -172,4 +144,53 @@ fn init_dispatcher<'a>(
         Box::new(joker),
         Box::new(img2msg),
     ])
+}
+
+fn bot_help<'a, 'b>(m: &'b mut CreateMessage<'a>) -> &'b mut CreateMessage<'a> {
+    m.embed(|e| {
+        e.color(EMBED_COLOR);
+        e.title("Joe's Saloon");
+        e.field(
+            "таки",
+            r#"
+`!takistart` — начнем партию
+`!takisuspects` — бросим взгляд на плакаты о розыске
+`!takistats` — поднимем бокал крепкого виски за самых метких стрелков
+                    "#,
+            false,
+        );
+        e.field(
+            "мэшап",
+            r#"
+`!mashup` — узнаем от бармена последние слухи
+`!mashupmore` — посплетничаем еще
+`!mashupstars` — поприветствуем жителей городка
+"#,
+            false,
+        );
+        e.field(
+            "политика",
+            r#"
+`!poll` — устроим честный суд
+"#,
+            false,
+        );
+        e.field(
+            "поговорим с джо",
+            r#"
+`что думаешь об итмо и бонче`
+`джокер++`
+`джокер про итмо`
+`джокер про итмо и бонч`
+"#,
+            false,
+        );
+        e.field(
+            "займемся делом",
+            "_покажи джо фотокарточку, о которой хочешь разузнать побольше_",
+            false,
+        );
+        e
+    });
+    m
 }

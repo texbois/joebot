@@ -1,5 +1,8 @@
 use crate::JoeResult;
-use serenity::{client::Context, model::channel::Message};
+use serenity::{
+    client::Context,
+    model::channel::{Message, Reaction},
+};
 
 mod chain;
 mod img2msg;
@@ -17,6 +20,10 @@ pub use wdyt::Wdyt;
 
 pub trait Command {
     fn handle_message(&mut self, ctx: &Context, msg: &Message) -> JoeResult<bool>;
+
+    fn handle_reaction(&mut self, _ctx: &Context, _rct: &Reaction) -> JoeResult<bool> {
+        Ok(false)
+    }
 }
 
 pub struct CommandDispatcher<'a> {
@@ -30,8 +37,16 @@ impl<'a> CommandDispatcher<'a> {
 
     pub fn handle_message(&mut self, ctx: &Context, msg: &Message) -> JoeResult<bool> {
         for cmd in &mut self.commands {
-            let result = cmd.handle_message(ctx, msg)?;
-            if result {
+            if cmd.handle_message(ctx, msg)? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    pub fn handle_reaction(&mut self, ctx: &Context, rct: &Reaction) -> JoeResult<bool> {
+        for cmd in &mut self.commands {
+            if cmd.handle_reaction(ctx, rct)? {
                 return Ok(true);
             }
         }
