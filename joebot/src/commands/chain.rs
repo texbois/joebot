@@ -42,7 +42,7 @@ impl super::Command for Chain {
                 Some(do_mashup(&self.last_command, &self.chain, &mut self.rng))
             }
             "!mashupmore" => Some(do_mashup(&self.last_command, &self.chain, &mut self.rng)),
-            "!mashupstars" => Some(mashup_sources(&self.chain, rest)),
+            "!mashupstars" => Some(mashup_sources(&self.chain)),
             _ => None,
         };
         if let Some(r) = resp {
@@ -102,66 +102,14 @@ fn do_mashup(command: &str, chain: &MarkovChain, rng: &mut SmallRng) -> String {
     }
 }
 
-fn mashup_sources(chain: &MarkovChain, filter: &str) -> String {
-    let sources = if !filter.is_empty() {
-        match pick_sources(filter, &chain.sources) {
-            Ok(sources) => sources,
-            Err(e) => return e,
-        }
-    } else {
-        chain.sources.iter().collect::<Vec<_>>()
-    };
+fn mashup_sources(chain: &MarkovChain) -> String {
     format!(
         "* {}\n",
-        sources
+        chain
+            .sources
             .iter()
-            .map(|s| {
-                s.names
-                    .iter()
-                    .map(|s| s.as_str())
-                    .collect::<Vec<_>>()
-                    .join(" / ")
-            })
+            .map(|s| s.name_re.as_str())
             .collect::<Vec<_>>()
             .join("\n* ")
     )
-}
-
-fn pick_sources<'s>(
-    names_str: &str,
-    sources: &'s [TextSource],
-) -> Result<Vec<&'s TextSource>, String> {
-    use alcs::FuzzyStrstr;
-
-    names_str
-        .to_lowercase()
-        .split(',')
-        .map(str::trim)
-        .try_fold(Vec::new(), |mut acc, name| {
-            let source = sources
-                .iter()
-                .flat_map(|source| {
-                    source.names.iter().map(move |source_name| {
-                        let source_name_lower = source_name.to_lowercase();
-                        if name == source_name_lower {
-                            Some((1.0, source))
-                        } else {
-                            source_name_lower
-                                .fuzzy_find_pos(name, 0.5)
-                                .map(|(score, _, _)| (score, source))
-                        }
-                    })
-                })
-                .flatten()
-                .max_by(|(score1, _), (score2, _)| score1.partial_cmp(score2).unwrap());
-            source
-                .ok_or(format!(
-                    "\u{274c} {}? Такого я здесь не встречал, приятель.",
-                    name
-                ))
-                .map(|(_, source)| {
-                    acc.push(source);
-                    acc
-                })
-        })
 }

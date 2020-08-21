@@ -602,7 +602,9 @@ dependencies = [
  "chrono",
  "indexmap",
  "rand",
+ "regex",
  "serde",
+ "serde_regex",
  "vkopt-message-parser",
 ]
 
@@ -1194,6 +1196,16 @@ checksum = "164eacbdb13512ec2745fb09d51fd5b22b0d65ed294a1dcf7285a360c80a675c"
 dependencies = [
  "itoa",
  "ryu",
+ "serde",
+]
+
+[[package]]
+name = "serde_regex"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a8136f1a4ea815d7eac4101cfd0b16dc0cb5e1fe1b8609dfd728058656b7badf"
+dependencies = [
+ "regex",
  "serde",
 ]
 

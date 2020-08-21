@@ -1,47 +1,58 @@
 use crate::{ChainEntry, ChainPrefix, ChainSuffix, Datestamp, MarkovChain, TextSource, NGRAM_CNT};
 use chrono::{Datelike, NaiveDateTime};
 use indexmap::IndexSet;
-use std::iter::FromIterator;
+use regex::Regex;
+use std::collections::HashMap;
 
 use vkopt_message_parser::reader::{fold_html, EventResult, MessageEvent};
 
 pub trait ChainAppend {
-    fn append_text(&mut self, input_file: &str, source_names: Vec<String>, datestamp: Datestamp);
+    fn append_text(&mut self, input_file: &str, source_name_re: Regex, datestamp: Datestamp);
 
-    fn append_message_dump(&mut self, input_file: &str);
+    fn append_message_dump(
+        &mut self,
+        input_file: &str,
+        short_name_to_re_map: &HashMap<String, Regex>,
+    );
 }
 
 #[derive(Default)]
 struct ExtractedMessage {
-    names: Vec<String>,
+    short_name: String,
     datestamp: Datestamp,
     body: String,
 }
 
 impl ChainAppend for MarkovChain {
-    fn append_text(&mut self, input_file: &str, source_names: Vec<String>, datestamp: Datestamp) {
+    fn append_text(&mut self, input_file: &str, source_name_re: Regex, datestamp: Datestamp) {
         let text = std::fs::read_to_string(input_file).unwrap();
-        let source = source_by_names(&mut self.sources, source_names);
-        push_text_entries(&text, datestamp, &mut source.entries, &mut self.words, false);
+        let source = source_by_name_re(&mut self.sources, &source_name_re);
+        push_text_entries(
+            &text,
+            datestamp,
+            &mut source.entries,
+            &mut self.words,
+            false,
+        );
     }
 
-    fn append_message_dump(&mut self, input_file: &str) {
+    fn append_message_dump(
+        &mut self,
+        input_file: &str,
+        short_name_to_re_map: &HashMap<String, Regex>,
+    ) {
         let last_msg = fold_html(
             input_file,
             Default::default(),
             |mut msg: ExtractedMessage, event| match event {
                 MessageEvent::Start(0) => {
                     if !msg.body.is_empty() {
-                        append_message(self, msg);
+                        append_message(self, msg, short_name_to_re_map);
                     }
                     EventResult::Consumed(Default::default())
                 }
-                MessageEvent::FullNameExtracted(full_name) => {
-                    msg.names.push(full_name.to_owned());
-                    EventResult::Consumed(msg)
-                }
                 MessageEvent::ShortNameExtracted(short_name) => {
-                    msg.names.push(short_name.to_owned());
+                    msg.short_name = short_name.to_owned();
                     EventResult::Consumed(msg)
                 }
                 MessageEvent::DateExtracted(date) => {
@@ -62,19 +73,20 @@ impl ChainAppend for MarkovChain {
         )
         .unwrap();
         if !last_msg.body.is_empty() {
-            append_message(self, last_msg);
+            append_message(self, last_msg, short_name_to_re_map);
         }
     }
 }
 
-fn source_by_names(sources: &mut Vec<TextSource>, names: Vec<String>) -> &mut TextSource {
+fn source_by_name_re<'a>(sources: &'a mut Vec<TextSource>, name_re: &Regex) -> &'a mut TextSource {
     let idx = sources
         .iter()
-        .position(|s| names.iter().any(|n| s.names.contains(n)))
+        .position(|s| s.name_re.as_str() == name_re.as_str())
         .unwrap_or_else(|| {
+            let entries = vec![];
             let new_source = TextSource {
-                names: IndexSet::from_iter(names.into_iter()),
-                ..Default::default()
+                name_re: name_re.to_owned(),
+                entries,
             };
             sources.push(new_source);
             sources.len() - 1
@@ -82,15 +94,21 @@ fn source_by_names(sources: &mut Vec<TextSource>, names: Vec<String>) -> &mut Te
     sources.get_mut(idx).unwrap()
 }
 
-fn append_message(chain: &mut MarkovChain, message: ExtractedMessage) {
-    let source = source_by_names(&mut chain.sources, message.names);
-    push_text_entries(
-        &message.body,
-        message.datestamp,
-        &mut source.entries,
-        &mut chain.words,
-        true,
-    );
+fn append_message(
+    chain: &mut MarkovChain,
+    message: ExtractedMessage,
+    short_name_to_re_map: &HashMap<String, Regex>,
+) {
+    if let Some(name_re) = &short_name_to_re_map.get(&message.short_name) {
+        let source = source_by_name_re(&mut chain.sources, name_re);
+        push_text_entries(
+            &message.body,
+            message.datestamp,
+            &mut source.entries,
+            &mut chain.words,
+            true,
+        );
+    }
 }
 
 fn push_text_entries(
@@ -147,21 +165,21 @@ mod tests {
     #[test]
     fn test_authors() {
         let mut chain = MarkovChain::new();
-        chain.append_message_dump("tests/fixtures/messages.html");
-        assert_eq!(
-            chain.sources[0].names,
-            indexset!["Sota Sota".into(), "sota".into()]
-        );
-        assert_eq!(
-            chain.sources[1].names,
-            indexset!["Denko Denko".into(), "denko".into()]
-        );
+        let mut name_map = HashMap::new();
+        name_map.insert("sota".into(), Regex::new("so|ta").unwrap());
+        name_map.insert("denko".into(), Regex::new("de|n|ko").unwrap());
+        chain.append_message_dump("tests/fixtures/messages.html", &name_map);
+        assert_eq!(chain.sources[0].name_re.as_str(), "so|ta");
+        assert_eq!(chain.sources[1].name_re.as_str(), "de|n|ko");
     }
 
     #[test]
     fn test_word_nodes() {
         let mut chain = MarkovChain::new();
-        chain.append_message_dump("tests/fixtures/messages.html");
+        let mut name_map = HashMap::new();
+        name_map.insert("sota".into(), Regex::new("so|ta").unwrap());
+        name_map.insert("denko".into(), Regex::new("de|n|ko").unwrap());
+        chain.append_message_dump("tests/fixtures/messages.html", &name_map);
         assert_eq!(chain.words.get_index(0), Some(&"Привет".into()));
         assert_eq!(chain.words.get_index(1), Some(&"Denko".into()));
         assert_eq!(chain.words.get_index(2), Some(&"Пью".into()));
@@ -193,7 +211,12 @@ mod tests {
     #[test]
     fn test_no_empty_words() {
         let mut chain = MarkovChain::new();
-        chain.append_message_dump("tests/fixtures/messages.html");
+
+        let mut name_map = HashMap::new();
+        name_map.insert("sota".into(), Regex::new("so|ta").unwrap());
+        name_map.insert("denko".into(), Regex::new("de|n|ko").unwrap());
+        chain.append_message_dump("tests/fixtures/messages.html", &name_map);
+
         let enumerated_words = chain.words.iter().enumerate();
         let empty_words =
             enumerated_words.filter_map(|(i, w)| if w.is_empty() { Some(i) } else { None });
@@ -205,7 +228,7 @@ mod tests {
         let mut chain = MarkovChain::new();
         chain.append_text(
             "tests/fixtures/text",
-            vec!["angus".into(), "sol onset".into()],
+            Regex::new("angus|sol onset").unwrap(),
             Datestamp { year: 0, day: 0 },
         );
         assert_eq!(
@@ -220,10 +243,7 @@ mod tests {
                 "red.".into()
             ]
         );
-        assert_eq!(
-            chain.sources[0].names,
-            indexset!["angus".into(), "sol onset".into()]
-        );
+        assert_eq!(chain.sources[0].name_re.as_str(), "angus|sol onset");
         assert_eq!(
             chain.sources[0].entries,
             vec![

@@ -7,6 +7,7 @@ pub use generate::ChainGenerate;
 pub use selector::{Selector, SelectorError};
 
 use indexmap::IndexSet;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
 
@@ -91,15 +92,16 @@ pub struct ChainEntry {
     pub datestamp: Datestamp,
 }
 
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TextSource {
-    pub names: IndexSet<String>,
+    #[serde(with = "serde_regex")]
+    pub name_re: Regex,
     pub entries: Vec<ChainEntry>,
 }
 
 impl PartialEq for TextSource {
     fn eq(&self, other: &Self) -> bool {
-        self.names == other.names
+        self.name_re.as_str() == other.name_re.as_str()
     }
 }
 
@@ -107,9 +109,7 @@ impl Eq for TextSource {}
 
 impl Hash for TextSource {
     fn hash<H: Hasher>(&self, hasher: &mut H) {
-        for n in &self.names {
-            n.hash(hasher);
-        }
+        self.name_re.as_str().hash(hasher);
     }
 }
 

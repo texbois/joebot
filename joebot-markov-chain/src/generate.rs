@@ -127,8 +127,9 @@ where
 mod tests {
     use super::*;
     use crate::{ChainAppend, ChainPrefix, ChainSuffix, Datestamp, TextSource};
-    use indexmap::indexset;
     use rand::{rngs::SmallRng, SeedableRng};
+    use regex::Regex;
+    use std::collections::HashMap;
 
     #[test]
     fn test_determined_generation() {
@@ -141,7 +142,7 @@ mod tests {
         chain.words.insert("собаками".into());
 
         chain.sources.push(TextSource {
-            names: indexset!["дана".into()],
+            name_re: Regex::new("дана").unwrap(),
             entries: vec![
                 ChainEntry {
                     prefix: ChainPrefix::starting([0, 1]),
@@ -162,7 +163,7 @@ mod tests {
             ],
         });
         chain.sources.push(TextSource {
-            names: indexset!["джилл".into()],
+            name_re: Regex::new("джилл").unwrap(),
             entries: vec![ChainEntry {
                 prefix: ChainPrefix::starting([2, 3]),
                 suffix: ChainSuffix::nonterminal(4),
@@ -185,7 +186,12 @@ mod tests {
     #[test]
     fn test_random_generation() {
         let mut chain = MarkovChain::new();
-        chain.append_message_dump("tests/fixtures/messages.html");
+
+        let mut name_map = HashMap::new();
+        name_map.insert("sota".into(), Regex::new("sota").unwrap());
+        name_map.insert("denko".into(), Regex::new("denko").unwrap());
+        chain.append_message_dump("tests/fixtures/messages.html", &name_map);
+
         let mut rng = SmallRng::from_seed([1; 16]);
         let selector = Selector::new(&chain, "sota | denko", None).unwrap();
         let generated = chain.generate(&selector, &mut rng, 1, 3);
@@ -195,7 +201,12 @@ mod tests {
     #[test]
     fn test_date_range_generation() {
         let mut chain = MarkovChain::new();
-        chain.append_message_dump("tests/fixtures/messages.html");
+
+        let mut name_map = HashMap::new();
+        name_map.insert("sota".into(), Regex::new("sota").unwrap());
+        name_map.insert("denko".into(), Regex::new("denko").unwrap());
+        chain.append_message_dump("tests/fixtures/messages.html", &name_map);
+
         let mut rng = SmallRng::from_seed([1; 16]);
 
         let selector = Selector::new(

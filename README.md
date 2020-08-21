@@ -32,8 +32,8 @@ Next, in the `joebot` crate root:
 1. Create a `chain_sources.json` file listing the sources for the textual Markov chain, for example:
 ```json
 [
-  { "type": "MessageDump", "path": "path/to/vkopt/message/dump.html" },
-  { "type": "Text", "path": "книга.txt", "names": ["книга"], "year": 2017, "day": 200 },
+  { "type": "MessageDump", "path": "path/to/vkopt/message/dump.html", "short_name_regexes": { "short_name": "r|e" } },
+  { "type": "Text", "path": "книга.txt", "name_regex": "книга", "year": 2017, "day": 200 },
 ]
 ```
 2. Run `cargo run --release --example mkbin` to covert the specified sources to chain data.

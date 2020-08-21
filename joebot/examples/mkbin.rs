@@ -1,6 +1,8 @@
 use bincode;
 use joebot_markov_chain::{ChainAppend, Datestamp, MarkovChain};
+use regex::Regex;
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::fs::File;
 
 fn main() {
@@ -20,10 +22,11 @@ fn main() {
 enum ChainSource {
     MessageDump {
         path: String,
+        short_name_regexes: HashMap<String, String>,
     },
     Text {
         path: String,
-        names: Vec<String>,
+        name_regex: String,
         year: i16,
         day: u16,
     },
@@ -33,13 +36,26 @@ fn build_chain_bin(sources: Vec<ChainSource>) {
     let mut chain = MarkovChain::new();
     for src in sources.into_iter() {
         match src {
-            ChainSource::MessageDump { path } => chain.append_message_dump(&path),
+            ChainSource::MessageDump {
+                path,
+                short_name_regexes,
+            } => {
+                let re_map = short_name_regexes
+                    .into_iter()
+                    .map(|(n, re)| (n, Regex::new(&re).unwrap()))
+                    .collect::<HashMap<_, _>>();
+                chain.append_message_dump(&path, &re_map);
+            }
             ChainSource::Text {
                 path,
-                names,
+                name_regex,
                 year,
                 day,
-            } => chain.append_text(&path, names, Datestamp { year, day }),
+            } => chain.append_text(
+                &path,
+                Regex::new(&name_regex).unwrap(),
+                Datestamp { year, day },
+            ),
         }
     }
     println!(
@@ -47,7 +63,7 @@ fn build_chain_bin(sources: Vec<ChainSource>) {
         chain
             .sources
             .iter()
-            .filter_map(|s| s.names.iter().nth(0).map(|s| s.as_str()))
+            .map(|s| s.name_re.as_str())
             .collect::<Vec<_>>()
             .join(",")
     );

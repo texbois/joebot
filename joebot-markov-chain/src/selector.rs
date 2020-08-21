@@ -26,7 +26,7 @@ impl<'a> Selector<'a> {
 
         let mut source_to_term_map = HashMap::new();
         for term in terms {
-            let source = chain.sources.iter().find(|s| s.names.contains(term));
+            let source = chain.sources.iter().find(|s| s.name_re.is_match(term));
             if let Some(s) = source {
                 source_to_term_map.insert(s, term.to_owned());
             } else {
