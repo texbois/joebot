@@ -10,6 +10,7 @@ mod joker;
 mod poll;
 mod taki;
 mod wdyt;
+mod randtext;
 
 pub use chain::Chain;
 pub use img2msg::Img2msg;
@@ -17,6 +18,7 @@ pub use joker::Joker;
 pub use poll::Poll;
 pub use taki::Taki;
 pub use wdyt::Wdyt;
+pub use randtext::RandText;
 
 pub trait Command {
     fn handle_message(&mut self, ctx: &Context, msg: &Message) -> JoeResult<bool>;

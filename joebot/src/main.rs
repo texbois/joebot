@@ -135,6 +135,7 @@ fn init_dispatcher<'a>(
     let wdyt = commands::Wdyt::new(&MESSAGE_DUMP).unwrap();
     let joker = commands::Joker::new(&MESSAGE_DUMP).unwrap();
     let img2msg = commands::Img2msg::new(&MESSAGE_DUMP).unwrap();
+    let randtext = commands::RandText::new().unwrap();
 
     commands::CommandDispatcher::new(vec![
         Box::new(taki),
@@ -143,6 +144,7 @@ fn init_dispatcher<'a>(
         Box::new(wdyt),
         Box::new(joker),
         Box::new(img2msg),
+        Box::new(randtext),
     ])
 }
 
@@ -181,6 +183,13 @@ fn bot_help<'a, 'b>(m: &'b mut CreateMessage<'a>) -> &'b mut CreateMessage<'a> {
 `джокер++`
 `джокер про итмо`
 `джокер про итмо и бонч`
+"#,
+            false,
+        );
+        e.field(
+            "просто отдохнем",
+            r#"
+`!random` — попросим бармена налить чего-нибудь покрепче
 "#,
             false,
         );
