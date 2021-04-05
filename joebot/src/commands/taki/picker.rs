@@ -4,6 +4,8 @@ use crate::{
 };
 use rand::{rngs::SmallRng, seq::SliceRandom};
 
+const MIN_NUM_WORDS: usize = 2;
+
 pub struct SuspectPicker<'a> {
     suspects: Vec<Suspect<'a>>,
     user_penalties: &'a UserPenalties,
@@ -26,7 +28,10 @@ impl<'a> SuspectPicker<'a> {
                 let texts = messages
                     .texts
                     .iter()
-                    .filter(|m| m.author_idx == idx)
+                    .filter(|m| {
+                        m.author_idx == idx
+                            && m.text.chars().filter(|&c| c == ' ').count() >= MIN_NUM_WORDS
+                    })
                     .map(|m| m.text.as_str())
                     .collect::<Vec<_>>();
 

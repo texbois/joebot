@@ -26,16 +26,41 @@ impl Redis {
     }
 }
 
+macro_rules! redis {
+    ($s:ident) => {
+        $s.connection.lock().unwrap()
+    };
+}
+
 impl ChatGameStorage {
-    pub fn incr_in_set(&mut self, set: &str, key: u64, by: i32) -> RedisResult<()> {
-        self.connection
-            .lock()
-            .unwrap()
-            .zincr(format!("{}-{}", self.key_prefix, set), key, by)
+    pub fn add_gt_to_set(&mut self, set: &str, member: u64, score: i32) -> RedisResult<()> {
+        let key = format!("{}-{}", self.key_prefix, set);
+        let mut con = redis!(self);
+
+        // ZADD GT is not available in Redis 4
+        let old_score: Option<i32> = con.zscore(&key, member)?;
+        if score > old_score.unwrap_or(0) {
+            con.zadd(&key, member, score)?;
+        }
+        Ok(())
+    }
+
+    pub fn get_in_set(&mut self, set: &str, member: u64) -> RedisResult<i32> {
+        let res: Option<i32> =
+            redis!(self).zscore(format!("{}-{}", self.key_prefix, set), member)?;
+        Ok(res.unwrap_or(0))
+    }
+
+    pub fn rem_from_set(&mut self, set: &str, member: u64) -> RedisResult<()> {
+        redis!(self).zrem(format!("{}-{}", self.key_prefix, set), member)
+    }
+
+    pub fn incr_in_set(&mut self, set: &str, member: u64, by: i32) -> RedisResult<i32> {
+        redis!(self).zincr(format!("{}-{}", self.key_prefix, set), member, by)
     }
 
     pub fn fetch_sorted_set(&mut self, set: &str) -> RedisResult<Vec<(u64, i32)>> {
-        self.connection.lock().unwrap().zrevrangebyscore_withscores(
+        redis!(self).zrevrangebyscore_withscores(
             format!("{}-{}", self.key_prefix, set),
             std::i32::MAX,
             std::i32::MIN,
